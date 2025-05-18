@@ -1,0 +1,14 @@
+{ "columns":42,
+ "image":"..\/images\/pixel-cyberpunk-interior.png",
+ "imageheight":352,
+ "imagewidth":672,
+ "margin":0,
+ "name":"pixel-cyberpunk-interior",
+ "spacing":0,
+ "tilecount":924,
+ "tiledversion":"1.11.2",
+ "tileheight":16,
+ "tilewidth":16,
+ "type":"tileset",
+ "version":"1.10"
+}

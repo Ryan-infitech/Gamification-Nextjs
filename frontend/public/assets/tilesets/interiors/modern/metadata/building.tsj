@@ -1,0 +1,14 @@
+{ "columns":36,
+ "image":"..\/..\/..\/..\/..\/..\/..\/..\/..\/..\/..\/Pictures\/fdfgbfsgfdsgfd.png",
+ "imageheight":576,
+ "imagewidth":576,
+ "margin":0,
+ "name":"fdfgbfsgfdsgfd",
+ "spacing":0,
+ "tilecount":1296,
+ "tiledversion":"1.11.2",
+ "tileheight":16,
+ "tilewidth":16,
+ "type":"tileset",
+ "version":"1.10"
+}
