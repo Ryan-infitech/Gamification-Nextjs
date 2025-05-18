@@ -1,26 +1,214 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import pixel font */
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap");
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* Pixel art color palette */
+  --pixel-black: #0f0f0f;
+  --pixel-dark: #1a1a1a;
+  --pixel-gray: #333333;
+  --pixel-light-gray: #5a5a5a;
+  --pixel-red: #ff004d;
+  --pixel-orange: #ff8426;
+  --pixel-blue: #29adff;
+  --pixel-green: #00e756;
+  --pixel-yellow: #ffec27;
+  --pixel-purple: #83769c;
+  --pixel-white: #fff1e8;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Cyberpunk colors */
+  --cyber-purple: #a78bfa;
+  --cyber-blue: #22d3ee;
+  --cyber-pink: #ec4899;
+  --cyber-indigo: #6366f1;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--pixel-black);
+  color: var(--pixel-white);
+  font-family: "VT323", monospace;
+  font-size: 18px;
+}
+
+/* Base styles for pixel art design */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "Press Start 2P", cursive;
+  color: var(--pixel-white);
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+h1 {
+  font-size: 2rem;
+  text-shadow: 2px 2px 0 var(--pixel-blue);
+}
+
+h2 {
+  font-size: 1.5rem;
+  text-shadow: 2px 2px 0 var(--pixel-purple);
+}
+
+h3 {
+  font-size: 1.25rem;
+  text-shadow: 1px 1px 0 var(--pixel-green);
+}
+
+a {
+  color: var(--pixel-blue);
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+a:hover {
+  color: var(--pixel-yellow);
+}
+
+/* Pixel art components */
+@layer components {
+  .pixel-container {
+    @apply relative border-2 rounded-none p-4 bg-gray-900;
+    border-color: var(--pixel-gray);
+    box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.5);
+  }
+
+  .pixel-button {
+    @apply px-6 py-3 border-0 relative transition-all duration-100 ease-in-out cursor-pointer text-center inline-block;
+    background-color: var(--pixel-blue);
+    color: var(--pixel-white);
+    font-family: "Press Start 2P", cursive;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    text-transform: uppercase;
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.5);
+  }
+
+  .pixel-button:hover {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+    filter: brightness(1.1);
+  }
+
+  .pixel-button:active {
+    transform: translate(4px, 4px);
+    box-shadow: none;
+  }
+
+  .pixel-input {
+    @apply bg-gray-800 border-2 border-gray-700 text-white px-3 py-2 w-full;
+    border-left-color: #444;
+    border-top-color: #444;
+    border-right-color: #222;
+    border-bottom-color: #222;
+  }
+
+  .pixel-title {
+    font-family: "Press Start 2P", cursive;
+    @apply text-xl md:text-2xl mb-6 text-center tracking-wide;
+    color: var(--pixel-yellow);
+  }
+
+  .pixel-card {
+    @apply bg-gray-800 overflow-hidden rounded-none border-2;
+    border-color: var(--pixel-gray);
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  .pixel-icon {
+    @apply text-4xl md:text-5xl mb-2 inline-block;
+    text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+  }
+
+  /* Game-specific styles */
+  .game-canvas-container {
+    @apply relative overflow-hidden bg-black border-4 border-gray-700;
+    image-rendering: pixelated;
+  }
+}
+
+/* Custom animations for cyberpunk effects */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.5);
+  }
+}
+
+.animate-float {
+  animation: float linear infinite;
+}
+
+.animate-glow {
+  animation: glow linear infinite;
+}
+
+/* Pixel art font utilities */
+.font-pixel {
+  font-family: "Press Start 2P", cursive;
+  letter-spacing: -0.05em;
+  line-height: 1.5;
+}
+
+/* Additional utilities */
+.text-shadow-pixel {
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.text-glow {
+  text-shadow: 0 0 5px var(--pixel-blue), 0 0 10px var(--pixel-blue);
+}
+
+/* Responsive container */
+.container {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container {
+    max-width: 640px;
+  }
+}
+
+@media (min-width: 768px) {
+  .container {
+    max-width: 768px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1024px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .container {
+    max-width: 1280px;
+  }
 }
