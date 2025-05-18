@@ -1,33 +1,29 @@
-import { ReactNode } from "react";
-import Head from "next/head";
+"use client";
+
+import React from "react";
 import Header from "./Header";
 import Footer from "./Footer";
 
 interface MainLayoutProps {
-  children: ReactNode;
-  title?: string;
-  description?: string;
+  children: React.ReactNode;
+  showHeader?: boolean;
+  showFooter?: boolean;
 }
 
 export default function MainLayout({
   children,
-  title = "CodeQuest Pixels",
-  description = "Learn programming through interactive, gamified challenges",
+  showHeader = true,
+  showFooter = true,
 }: MainLayoutProps) {
   return (
-    <div className="flex flex-col min-h-screen bg-gray-900">
-      <Head>
-        <title>{title}</title>
-        <meta name="description" content={description} />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
+    <div className="min-h-screen flex flex-col bg-[#0f0f0f]">
+      {showHeader && <Header />}
 
-      <Header />
+      <main className="flex-grow py-8">
+        <div className="container mx-auto px-4">{children}</div>
+      </main>
 
-      <main className="flex-grow">{children}</main>
-
-      <Footer />
+      {showFooter && <Footer />}
     </div>
   );
 }

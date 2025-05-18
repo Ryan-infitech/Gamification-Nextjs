@@ -1,15 +1,16 @@
+"use client";
+
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/router";
-import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import { toast } from "sonner";
-import { Menu, Transition } from "@headlessui/react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useAuthStore } from "@/store/authStore";
 
 export default function Header() {
   const router = useRouter();
-  const supabase = useSupabaseClient();
+  const supabase = createClientComponentClient();
   const { user, isAuthenticated, clearUser } = useAuthStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -26,277 +27,142 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-gray-800 shadow-md">
+    <header className="bg-[var(--pixel-dark)] border-b-4 border-[var(--pixel-gray)]">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between py-4">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
-            <Image
-              src="/logo.png"
-              alt="CodeQuest Pixels"
-              width={40}
-              height={40}
-              className="w-10 h-10"
-            />
-            <span className="text-xl font-bold text-white">
-              CodeQuest Pixels
-            </span>
+            <div className="h-8 w-8 bg-[var(--pixel-blue)] flex items-center justify-center">
+              <span className="font-['Press_Start_2P'] text-xs text-white">
+                CQ
+              </span>
+            </div>
+            <div>
+              <span className="font-['Press_Start_2P'] text-sm">
+                <span className="text-[var(--pixel-blue)]">Code</span>
+                <span className="text-[var(--pixel-purple)]">Quest</span>
+              </span>
+            </div>
           </Link>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
             <Link
               href="/"
-              className={`text-sm text-gray-300 hover:text-white ${
-                router.pathname === "/" ? "text-white" : ""
-              }`}
+              className="text-[var(--pixel-white)] hover:text-[var(--pixel-blue)] transition-colors tracking-wide text-sm"
             >
               Home
             </Link>
-            <Link
-              href="/about"
-              className={`text-sm text-gray-300 hover:text-white ${
-                router.pathname === "/about" ? "text-white" : ""
-              }`}
-            >
-              About
-            </Link>
-            <Link
-              href="/features"
-              className={`text-sm text-gray-300 hover:text-white ${
-                router.pathname === "/features" ? "text-white" : ""
-              }`}
-            >
-              Features
-            </Link>
-            {isAuthenticated ? (
+
+            {isAuthenticated && (
               <>
                 <Link
                   href="/dashboard"
-                  className={`text-sm text-gray-300 hover:text-white ${
-                    router.pathname === "/dashboard" ? "text-white" : ""
-                  }`}
+                  className="text-[var(--pixel-white)] hover:text-[var(--pixel-green)] transition-colors tracking-wide text-sm"
                 >
                   Dashboard
                 </Link>
                 <Link
                   href="/game"
-                  className={`text-sm text-gray-300 hover:text-white ${
-                    router.pathname === "/game" ? "text-white" : ""
-                  }`}
+                  className="text-[var(--pixel-white)] hover:text-[var(--pixel-yellow)] transition-colors tracking-wide text-sm"
                 >
                   Play Game
-                </Link>
-              </>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  className={`text-sm text-gray-300 hover:text-white ${
-                    router.pathname === "/login" ? "text-white" : ""
-                  }`}
-                >
-                  Login
-                </Link>
-                <Link
-                  href="/register"
-                  className="px-4 py-2 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-                >
-                  Sign Up
                 </Link>
               </>
             )}
           </nav>
 
-          {/* User Menu (if logged in) */}
-          {isAuthenticated && (
-            <div className="hidden md:block">
-              <Menu as="div" className="relative">
-                <Menu.Button className="flex items-center space-x-2 text-gray-300 hover:text-white">
-                  <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden">
-                    {user?.avatarUrl ? (
-                      <Image
-                        src={user.avatarUrl}
-                        alt={user.username || "User"}
-                        width={32}
-                        height={32}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-indigo-600 text-white">
-                        {user?.username?.charAt(0).toUpperCase() || "U"}
-                      </div>
-                    )}
-                  </div>
-                  <span>{user?.username || "User"}</span>
-                </Menu.Button>
-
-                <Transition
-                  enter="transition ease-out duration-100"
-                  enterFrom="transform opacity-0 scale-95"
-                  enterTo="transform opacity-100 scale-100"
-                  leave="transition ease-in duration-75"
-                  leaveFrom="transform opacity-100 scale-100"
-                  leaveTo="transform opacity-0 scale-95"
+          {/* Auth Buttons */}
+          <div className="hidden md:flex items-center space-x-4">
+            {isAuthenticated ? (
+              <button
+                onClick={handleLogout}
+                className="pixel-button bg-[var(--pixel-red)]"
+              >
+                Log out
+              </button>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="text-[var(--pixel-white)] hover:text-[var(--pixel-blue)] px-4 py-2"
                 >
-                  <Menu.Items className="absolute right-0 mt-2 w-48 origin-top-right rounded-md bg-gray-700 py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                    <Menu.Item>
-                      {({ active }) => (
-                        <Link
-                          href="/profile"
-                          className={`${
-                            active ? "bg-gray-600" : ""
-                          } block px-4 py-2 text-sm text-gray-200`}
-                        >
-                          Your Profile
-                        </Link>
-                      )}
-                    </Menu.Item>
-                    <Menu.Item>
-                      {({ active }) => (
-                        <Link
-                          href="/inventory"
-                          className={`${
-                            active ? "bg-gray-600" : ""
-                          } block px-4 py-2 text-sm text-gray-200`}
-                        >
-                          Inventory
-                        </Link>
-                      )}
-                    </Menu.Item>
-                    <Menu.Item>
-                      {({ active }) => (
-                        <Link
-                          href="/settings"
-                          className={`${
-                            active ? "bg-gray-600" : ""
-                          } block px-4 py-2 text-sm text-gray-200`}
-                        >
-                          Settings
-                        </Link>
-                      )}
-                    </Menu.Item>
-                    <Menu.Item>
-                      {({ active }) => (
-                        <button
-                          onClick={handleLogout}
-                          className={`${
-                            active ? "bg-gray-600" : ""
-                          } block w-full text-left px-4 py-2 text-sm text-gray-200`}
-                        >
-                          Sign out
-                        </button>
-                      )}
-                    </Menu.Item>
-                  </Menu.Items>
-                </Transition>
-              </Menu>
-            </div>
-          )}
+                  Login
+                </Link>
+                <Link href="/register" className="pixel-button">
+                  Register
+                </Link>
+              </>
+            )}
+          </div>
 
           {/* Mobile menu button */}
           <button
-            className="md:hidden text-gray-300 hover:text-white focus:outline-none"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden text-[var(--pixel-white)] hover:text-[var(--pixel-blue)] px-2 py-2 text-2xl border-2 border-[var(--pixel-gray)]"
+            aria-label="Toggle mobile menu"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
+            {mobileMenuOpen ? "×" : "≡"}
           </button>
         </div>
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-gray-700">
-            <div className="flex flex-col space-y-4">
+          <div className="md:hidden py-3 border-t-2 border-[var(--pixel-gray)]">
+            <nav className="flex flex-col space-y-3">
               <Link
                 href="/"
-                className={`text-sm text-gray-300 hover:text-white ${
-                  router.pathname === "/" ? "text-white" : ""
-                }`}
+                className="text-[var(--pixel-white)] hover:text-[var(--pixel-blue)] py-2 px-4 border-l-2 border-[var(--pixel-blue)]"
+                onClick={() => setMobileMenuOpen(false)}
               >
                 Home
-              </Link>
-              <Link
-                href="/about"
-                className={`text-sm text-gray-300 hover:text-white ${
-                  router.pathname === "/about" ? "text-white" : ""
-                }`}
-              >
-                About
-              </Link>
-              <Link
-                href="/features"
-                className={`text-sm text-gray-300 hover:text-white ${
-                  router.pathname === "/features" ? "text-white" : ""
-                }`}
-              >
-                Features
               </Link>
 
               {isAuthenticated ? (
                 <>
                   <Link
                     href="/dashboard"
-                    className={`text-sm text-gray-300 hover:text-white ${
-                      router.pathname === "/dashboard" ? "text-white" : ""
-                    }`}
+                    className="text-[var(--pixel-white)] hover:text-[var(--pixel-green)] py-2 px-4 border-l-2 border-[var(--pixel-green)]"
+                    onClick={() => setMobileMenuOpen(false)}
                   >
                     Dashboard
                   </Link>
                   <Link
                     href="/game"
-                    className={`text-sm text-gray-300 hover:text-white ${
-                      router.pathname === "/game" ? "text-white" : ""
-                    }`}
+                    className="text-[var(--pixel-white)] hover:text-[var(--pixel-yellow)] py-2 px-4 border-l-2 border-[var(--pixel-yellow)]"
+                    onClick={() => setMobileMenuOpen(false)}
                   >
                     Play Game
                   </Link>
-                  <Link
-                    href="/profile"
-                    className={`text-sm text-gray-300 hover:text-white ${
-                      router.pathname === "/profile" ? "text-white" : ""
-                    }`}
-                  >
-                    Your Profile
-                  </Link>
                   <button
-                    onClick={handleLogout}
-                    className="text-sm text-left text-red-400 hover:text-red-300"
+                    onClick={() => {
+                      handleLogout();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="text-[var(--pixel-red)] py-2 px-4 text-left border-l-2 border-[var(--pixel-red)]"
                   >
-                    Sign out
+                    Log out
                   </button>
                 </>
               ) : (
                 <>
                   <Link
                     href="/login"
-                    className={`text-sm text-gray-300 hover:text-white ${
-                      router.pathname === "/login" ? "text-white" : ""
-                    }`}
+                    className="text-[var(--pixel-white)] hover:text-[var(--pixel-blue)] py-2 px-4 border-l-2 border-[var(--pixel-blue)]"
+                    onClick={() => setMobileMenuOpen(false)}
                   >
                     Login
                   </Link>
                   <Link
                     href="/register"
-                    className="px-4 py-2 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 inline-block w-fit"
+                    className="text-[var(--pixel-white)] hover:text-[var(--pixel-green)] py-2 px-4 border-l-2 border-[var(--pixel-green)]"
+                    onClick={() => setMobileMenuOpen(false)}
                   >
-                    Sign Up
+                    Register
                   </Link>
                 </>
               )}
-            </div>
+            </nav>
           </div>
         )}
       </div>
