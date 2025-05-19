@@ -1,0 +1,14 @@
+{ "columns":24,
+ "image":"Modern_tiles_Adam_16x16.png",
+ "imageheight":224,
+ "imagewidth":384,
+ "margin":0,
+ "name":"Modern_tiles_Adam_16x16",
+ "spacing":0,
+ "tilecount":336,
+ "tiledversion":"1.11.2",
+ "tileheight":16,
+ "tilewidth":16,
+ "type":"tileset",
+ "version":"1.10"
+}

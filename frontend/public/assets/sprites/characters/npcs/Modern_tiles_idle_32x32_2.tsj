@@ -1,0 +1,14 @@
+{ "columns":2,
+ "image":"Modern_tiles_idle_32x32_2.png",
+ "imageheight":64,
+ "imagewidth":128,
+ "margin":0,
+ "name":"Modern_tiles_idle_32x32_2",
+ "spacing":0,
+ "tilecount":2,
+ "tiledversion":"1.11.2",
+ "tileheight":64,
+ "tilewidth":64,
+ "type":"tileset",
+ "version":"1.10"
+}
