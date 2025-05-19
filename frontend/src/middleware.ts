@@ -2,36 +2,47 @@ import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// List of routes that require authentication
+const PROTECTED_ROUTES = ["/game", "/profile", "/leaderboard", "/achievements"];
+
+// Routes that should redirect to dashboard if user is already logged in
+const AUTH_ROUTES = ["/login", "/register"];
+
+// Check if the path matches any of the protected paths
+function isProtectedRoute(path: string): boolean {
+  return PROTECTED_ROUTES.some(
+    (route) => path === route || path.startsWith(`${route}/`)
+  );
+}
+
+// Check if the path is an authentication route
+function isAuthRoute(path: string): boolean {
+  return AUTH_ROUTES.some(
+    (route) => path === route || path.startsWith(`${route}/`)
+  );
+}
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const supabase = createMiddlewareClient({ req, res });
 
-  // Refresh session if expired
+  // Check if we have a session
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  // Optional: Check protected routes
-  // This section can be customized based on your authentication requirements
-  const protectedRoutes = ["/dashboard", "/profile", "/settings"];
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    req.nextUrl.pathname.startsWith(route)
-  );
+  const path = req.nextUrl.pathname;
 
-  if (isProtectedRoute && !session) {
+  // Redirect unauthenticated users from protected routes to login
+  if (isProtectedRoute(path) && !session) {
     const redirectUrl = new URL("/login", req.url);
-    redirectUrl.searchParams.set("redirectedFrom", req.nextUrl.pathname);
+    redirectUrl.searchParams.set("redirect_to", path);
     return NextResponse.redirect(redirectUrl);
   }
 
-  // If user is logged in and tries to access login/register, redirect to dashboard
-  const authRoutes = ["/login", "/register"];
-  const isAuthRoute = authRoutes.some(
-    (route) => req.nextUrl.pathname === route
-  );
-
-  if (isAuthRoute && session) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+  // Redirect authenticated users from auth routes to dashboard
+  if (isAuthRoute(path) && session) {
+    return NextResponse.redirect(new URL("/game", req.url));
   }
 
   return res;
@@ -39,6 +50,14 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|logo.png|images|api/auth/callback).*)",
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public folder
+     * - api routes (except auth)
+     */
+    "/((?!_next/static|_next/image|favicon.ico|assets|api(?!/auth)).*)",
   ],
 };
