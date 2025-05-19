@@ -1,41 +1,30 @@
 "use client";
 
-import { useState, FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { toast } from "sonner";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import MainLayout from "@/components/layout/MainLayout";
-import { useAuthStore } from "@/store/authStore";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
-export default function Login() {
+export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClientComponentClient();
-  const setUser = useAuthStore((state) => state.setUser);
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!email) newErrors.email = "Email is required";
-    if (!password) newErrors.password = "Password is required";
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleLogin = async (e: FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) return;
+    if (!email || !password) {
+      setError("Please enter both email and password");
+      return;
+    }
 
-    setLoading(true);
     try {
+      setError(null);
+      setIsLoading(true);
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -43,150 +32,147 @@ export default function Login() {
 
       if (error) throw error;
 
-      if (data.user) {
-        // Fetch user profile data
-        const { data: userData } = await supabase
-          .from("users")
-          .select("*, player_stats(*)")
-          .eq("id", data.user.id)
-          .single();
-
-        // Update global state
-        setUser({
-          id: data.user.id,
-          email: data.user.email as string,
-          username: userData?.username || "",
-          displayName: userData?.display_name || "",
-          avatarUrl: userData?.avatar_url || "",
-          playerStats: userData?.player_stats || null,
-        });
-
-        toast.success("Login successful!");
-        router.push("/dashboard");
-      }
+      // Redirect to game after successful login
+      router.push("/game");
     } catch (error: any) {
-      toast.error(error.message || "Login failed. Please try again.");
       console.error("Login error:", error);
+      setError(error.message || "Failed to log in");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <MainLayout>
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8 bg-gray-800 p-8 rounded-xl shadow-lg">
-          <div className="text-center">
-            <div className="flex justify-center">
-              <Image
-                src="/logo.png"
-                alt="CodeQuest Pixels Logo"
-                width={80}
-                height={80}
-                className="h-20 w-20"
-              />
-            </div>
-            <h2 className="mt-6 text-3xl font-extrabold text-white">
-              Sign in to your account
-            </h2>
-            <p className="mt-2 text-sm text-gray-400">
-              Or{" "}
-              <Link
-                href="/register"
-                className="font-medium text-indigo-400 hover:text-indigo-300"
-              >
-                create a new account
-              </Link>
-            </p>
-          </div>
-
-          <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-            <div className="rounded-md shadow-sm -space-y-px">
-              <div className="mb-4">
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-600 placeholder-gray-500 text-white rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm bg-gray-700"
-                  placeholder="Email address"
-                />
-                {errors.email && (
-                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Password
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-600 placeholder-gray-500 text-white rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm bg-gray-700"
-                  placeholder="Password"
-                />
-                {errors.password && (
-                  <p className="text-red-500 text-xs mt-1">{errors.password}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-500 rounded bg-gray-700"
-                />
-                <label
-                  htmlFor="remember-me"
-                  className="ml-2 block text-sm text-gray-300"
-                >
-                  Remember me
-                </label>
-              </div>
-
-              <div className="text-sm">
-                <Link
-                  href="/forgot-password"
-                  className="font-medium text-indigo-400 hover:text-indigo-300"
-                >
-                  Forgot your password?
-                </Link>
-              </div>
-            </div>
-
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Signing in..." : "Sign in"}
-              </button>
-            </div>
-          </form>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--dark-bg)] p-4">
+      {/* Background elements */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-[var(--darker-bg)]">
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `
+                linear-gradient(to right, var(--neon-blue) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--neon-blue) 1px, transparent 1px)
+              `,
+              backgroundSize: "40px 40px",
+              opacity: 0.1,
+              transform: "perspective(500px) rotateX(60deg)",
+              transformOrigin: "center bottom",
+            }}
+          />
         </div>
       </div>
-    </MainLayout>
+
+      {/* Login container */}
+      <div className="w-full max-w-md z-10 relative">
+        {/* Logo */}
+        <div className="flex justify-center mb-8">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="relative w-12 h-12 overflow-hidden">
+              <div className="glitch-wrapper">
+                <div className="glitch">
+                  <Image
+                    src="/pixel-logo.png"
+                    alt="CodeQuest Pixels Logo"
+                    width={48}
+                    height={48}
+                    className="object-contain"
+                  />
+                </div>
+              </div>
+            </div>
+            <span className="font-bold text-2xl tracking-tight font-[family-name:var(--font-geist-mono)] neon-text">
+              CodeQuest<span className="text-[var(--neon-pink)]">Pixels</span>
+            </span>
+          </Link>
+        </div>
+
+        {/* Login form */}
+        <div className="bg-[var(--dark-surface)] border border-[var(--neon-blue)] p-8 rounded-md pixel-corners">
+          <h1 className="text-2xl font-bold mb-6 text-center neon-text">
+            LOGIN
+          </h1>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-900/30 border border-red-500 text-red-300 text-sm rounded">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-2">
+              <label className="block text-sm font-[family-name:var(--font-geist-mono)] text-gray-300">
+                EMAIL
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 bg-[var(--darker-bg)] border border-[var(--light-surface)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--neon-blue)] focus:border-transparent text-white"
+                placeholder="your@email.com"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <label className="block text-sm font-[family-name:var(--font-geist-mono)] text-gray-300">
+                  PASSWORD
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-[var(--neon-blue)] hover:text-[var(--neon-purple)]"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 bg-[var(--darker-bg)] border border-[var(--light-surface)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--neon-blue)] focus:border-transparent text-white"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="cyber-button-alt w-full py-2 text-center relative overflow-hidden group"
+            >
+              {isLoading ? (
+                <div className="loading-pixels">
+                  <div></div>
+                  <div></div>
+                  <div></div>
+                </div>
+              ) : (
+                "ENTER THE GRID"
+              )}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center text-sm">
+            <span className="text-gray-400">New to the system?</span>{" "}
+            <Link
+              href="/register"
+              className="text-[var(--neon-pink)] hover:text-[var(--neon-purple)]"
+            >
+              Create Account
+            </Link>
+          </div>
+        </div>
+
+        {/* Decorative elements */}
+        <div className="mt-8 flex justify-center items-center">
+          <div className="w-32 h-px bg-gradient-to-r from-transparent via-[var(--neon-blue)] to-transparent"></div>
+          <div className="mx-4 text-xs text-gray-500 font-[family-name:var(--font-geist-mono)]">
+            SECURE LOGIN
+          </div>
+          <div className="w-32 h-px bg-gradient-to-r from-transparent via-[var(--neon-blue)] to-transparent"></div>
+        </div>
+      </div>
+    </div>
   );
 }

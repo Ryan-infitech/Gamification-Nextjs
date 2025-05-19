@@ -1,24 +1,30 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
-import { Toaster } from "sonner";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { SupabaseProvider } from "@/lib/supabase-provider";
+import { AuthProvider } from "@/contexts/AuthContext";
 
-const inter = Inter({
-  variable: "--font-inter",
+const geistSans = Geist({
+  variable: "--font-geist-sans",
   subsets: ["latin"],
-  display: "swap",
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
   subsets: ["latin"],
-  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "CodeQuest Pixels | Gamified Coding Adventure",
-  description: "Learn programming through interactive, gamified challenges",
+  title: "CodeQuest Pixels | Learn Computer Science through Gaming",
+  description:
+    "A gamified platform to learn computer science concepts through pixel-art style cyberpunk adventures",
+  keywords: [
+    "programming",
+    "computer science",
+    "game",
+    "learn to code",
+    "pixel art",
+    "cyberpunk",
+  ],
 };
 
 export default function RootLayout({
@@ -27,14 +33,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className="dark">
       <body
-        className={`${inter.variable} ${jetbrainsMono.variable} antialiased min-h-screen flex flex-col bg-gray-900 text-white`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[var(--dark-bg)] text-white`}
       >
-        <SupabaseProvider>
-          <Toaster position="top-right" richColors />
-          {children}
-        </SupabaseProvider>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

@@ -1,66 +1,42 @@
 "use client";
 
-import { useState, FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { toast } from "sonner";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import MainLayout from "@/components/layout/MainLayout";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
-export default function Register() {
+export default function RegisterPage() {
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const [formData, setFormData] = useState({
-    username: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-  });
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    const { username, email, password, confirmPassword } = formData;
-
-    if (!username) newErrors.username = "Username is required";
-    else if (username.length < 3)
-      newErrors.username = "Username must be at least 3 characters";
-
-    if (!email) newErrors.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = "Email is invalid";
-
-    if (!password) newErrors.password = "Password is required";
-    else if (password.length < 6)
-      newErrors.password = "Password must be at least 6 characters";
-
-    if (password !== confirmPassword)
-      newErrors.confirmPassword = "Passwords do not match";
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async (e: FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) return;
+    if (!username || !email || !password) {
+      setError("Please fill out all fields");
+      return;
+    }
 
-    setLoading(true);
-    const { username, email, password } = formData;
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
 
     try {
-      // Register user with Supabase Auth
+      setError(null);
+      setIsLoading(true);
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -74,174 +50,173 @@ export default function Register() {
 
       if (error) throw error;
 
-      if (data.user) {
-        toast.success(
-          "Registration successful! Please check your email for verification."
-        );
-        router.push("/login");
-      }
+      // Show success and redirect
+      router.push("/login?registered=true");
     } catch (error: any) {
-      toast.error(error.message || "Registration failed. Please try again.");
       console.error("Registration error:", error);
+      setError(error.message || "Failed to register");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <MainLayout>
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8 bg-gray-800 p-8 rounded-xl shadow-lg">
-          <div className="text-center">
-            <div className="flex justify-center">
-              <Image
-                src="/logo.png"
-                alt="CodeQuest Pixels Logo"
-                width={80}
-                height={80}
-                className="h-20 w-20"
-              />
-            </div>
-            <h2 className="mt-6 text-3xl font-extrabold text-white">
-              Create your account
-            </h2>
-            <p className="mt-2 text-sm text-gray-400">
-              Or{" "}
-              <Link
-                href="/login"
-                className="font-medium text-indigo-400 hover:text-indigo-300"
-              >
-                sign in to existing account
-              </Link>
-            </p>
-          </div>
-
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            <div className="rounded-md shadow-sm -space-y-px">
-              <div className="mb-4">
-                <label
-                  htmlFor="username"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Username
-                </label>
-                <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  autoComplete="username"
-                  required
-                  value={formData.username}
-                  onChange={handleChange}
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-600 placeholder-gray-500 text-white rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm bg-gray-700"
-                  placeholder="Choose a username"
-                />
-                {errors.username && (
-                  <p className="text-red-500 text-xs mt-1">{errors.username}</p>
-                )}
-              </div>
-
-              <div className="mb-4">
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-600 placeholder-gray-500 text-white rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm bg-gray-700"
-                  placeholder="Email address"
-                />
-                {errors.email && (
-                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-                )}
-              </div>
-
-              <div className="mb-4">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Password
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-600 placeholder-gray-500 text-white rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm bg-gray-700"
-                  placeholder="Password"
-                />
-                {errors.password && (
-                  <p className="text-red-500 text-xs mt-1">{errors.password}</p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="confirmPassword"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Confirm Password
-                </label>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-600 placeholder-gray-500 text-white rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm bg-gray-700"
-                  placeholder="Confirm password"
-                />
-                {errors.confirmPassword && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {errors.confirmPassword}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Creating account..." : "Create account"}
-              </button>
-            </div>
-
-            <div className="text-xs text-gray-400 mt-4">
-              By creating an account, you agree to our{" "}
-              <Link
-                href="/terms"
-                className="text-indigo-400 hover:text-indigo-300"
-              >
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link
-                href="/privacy"
-                className="text-indigo-400 hover:text-indigo-300"
-              >
-                Privacy Policy
-              </Link>
-            </div>
-          </form>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--dark-bg)] p-4">
+      {/* Background elements */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-[var(--darker-bg)]">
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `
+                linear-gradient(to right, var(--neon-pink) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--neon-pink) 1px, transparent 1px)
+              `,
+              backgroundSize: "40px 40px",
+              opacity: 0.1,
+              transform: "perspective(500px) rotateX(60deg)",
+              transformOrigin: "center bottom",
+            }}
+          />
         </div>
       </div>
-    </MainLayout>
+
+      {/* Register container */}
+      <div className="w-full max-w-md z-10 relative">
+        {/* Logo */}
+        <div className="flex justify-center mb-8">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="relative w-12 h-12 overflow-hidden">
+              <div className="glitch-wrapper">
+                <div className="glitch">
+                  <Image
+                    src="/pixel-logo.png"
+                    alt="CodeQuest Pixels Logo"
+                    width={48}
+                    height={48}
+                    className="object-contain"
+                  />
+                </div>
+              </div>
+            </div>
+            <span className="font-bold text-2xl tracking-tight font-[family-name:var(--font-geist-mono)] neon-text">
+              CodeQuest<span className="text-[var(--neon-pink)]">Pixels</span>
+            </span>
+          </Link>
+        </div>
+
+        {/* Register form */}
+        <div className="bg-[var(--dark-surface)] border border-[var(--neon-pink)] p-8 rounded-md pixel-corners">
+          <h1 className="text-2xl font-bold mb-6 text-center neon-text-pink">
+            CREATE ACCOUNT
+          </h1>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-900/30 border border-red-500 text-red-300 text-sm rounded">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div className="space-y-2">
+              <label className="block text-sm font-[family-name:var(--font-geist-mono)] text-gray-300">
+                USERNAME
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-3 py-2 bg-[var(--darker-bg)] border border-[var(--light-surface)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--neon-pink)] focus:border-transparent text-white"
+                placeholder="codehacker42"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-[family-name:var(--font-geist-mono)] text-gray-300">
+                EMAIL
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 bg-[var(--darker-bg)] border border-[var(--light-surface)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--neon-pink)] focus:border-transparent text-white"
+                placeholder="your@email.com"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-[family-name:var(--font-geist-mono)] text-gray-300">
+                PASSWORD
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 bg-[var(--darker-bg)] border border-[var(--light-surface)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--neon-pink)] focus:border-transparent text-white"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
+              <p className="text-xs text-gray-500">
+                Must be at least 6 characters
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-[family-name:var(--font-geist-mono)] text-gray-300">
+                CONFIRM PASSWORD
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-3 py-2 bg-[var(--darker-bg)] border border-[var(--light-surface)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--neon-pink)] focus:border-transparent text-white"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="cyber-button w-full py-2 text-center relative overflow-hidden group bg-[var(--neon-pink)] border-[var(--neon-pink)] text-white hover:bg-[var(--neon-pink)]/80"
+              >
+                {isLoading ? (
+                  <div className="loading-pixels">
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                  </div>
+                ) : (
+                  "CREATE DIGITAL IDENTITY"
+                )}
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-6 text-center text-sm">
+            <span className="text-gray-400">Already have an account?</span>{" "}
+            <Link
+              href="/login"
+              className="text-[var(--neon-blue)] hover:text-[var(--neon-purple)]"
+            >
+              Login
+            </Link>
+          </div>
+        </div>
+
+        {/* Decorative elements */}
+        <div className="mt-8 flex justify-center items-center">
+          <div className="w-32 h-px bg-gradient-to-r from-transparent via-[var(--neon-pink)] to-transparent"></div>
+          <div className="mx-4 text-xs text-gray-500 font-[family-name:var(--font-geist-mono)]">
+            JOIN THE NETWORK
+          </div>
+          <div className="w-32 h-px bg-gradient-to-r from-transparent via-[var(--neon-pink)] to-transparent"></div>
+        </div>
+      </div>
+    </div>
   );
 }
