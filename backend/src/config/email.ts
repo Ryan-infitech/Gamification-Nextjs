@@ -1,276 +1,250 @@
 import nodemailer from "nodemailer";
 import handlebars from "handlebars";
-import fs from "fs/promises";
+import fs from "fs";
 import path from "path";
 import { env } from "./env";
-import { supabase } from "./database";
-import logger from "./logger";
 
-// Interface untuk template email
-export interface EmailTemplate {
-  id: string;
+/**
+ * Email template data structure
+ */
+interface EmailTemplate {
   name: string;
   subject: string;
-  body: string;
-  placeholders: string[];
-  is_active: boolean;
+  template: string;
 }
 
-// Interface untuk opsi email
-export interface EmailOptions {
+/**
+ * Email options interface
+ */
+interface SendEmailOptions {
   to: string | string[];
-  subject?: string;
-  template?: string;
-  context?: Record<string, any>;
-  html?: string;
-  text?: string;
-  from?: string;
+  subject: string;
+  template: string;
+  context: Record<string, any>;
   attachments?: Array<{
     filename: string;
-    content?: any;
-    path?: string;
+    content: string | Buffer;
     contentType?: string;
   }>;
 }
 
-// Buat transport Nodemailer
-const createTransport = () => {
-  // Gunakan ethereal untuk testing
-  if (env.NODE_ENV === "development" && !env.EMAIL_HOST) {
-    logger.info("Using Ethereal Email for testing");
-    return nodemailer.createTransport({
-      host: "smtp.ethereal.email",
-      port: 587,
+/**
+ * Email service for sending emails with templates
+ */
+class EmailService {
+  private transporter!: nodemailer.Transporter; // Added the definite assignment assertion (!)
+  private templates: Map<string, EmailTemplate> = new Map();
+  private templatesDir = path.resolve(__dirname, "../../templates/emails");
+
+  /**
+   * Initialize email service with configured transporter
+   */
+  constructor() {
+    this.initializeTransporter();
+    this.loadTemplates();
+    this.registerHelpers();
+  }
+
+  /**
+   * Initialize nodemailer transporter with environment configuration
+   */
+  private initializeTransporter() {
+    // Convert port string to number
+    const emailPort = parseInt(env.EMAIL_PORT, 10);
+
+    this.transporter = nodemailer.createTransport({
+      // Use proper object structure for nodemailer
+      service: "SMTP",
       auth: {
-        user: "ethereal.user@ethereal.email", // gunakan akun ethereal yang valid
-        pass: "ethereal_password", // gunakan password yang valid
+        user: env.EMAIL_USER,
+        pass: env.EMAIL_PASS,
       },
-    });
+      // Transport options
+      host: env.EMAIL_HOST,
+      port: emailPort,
+      secure: emailPort === 465, // true for 465, false for other ports
+      tls: {
+        rejectUnauthorized: false, // Allow self-signed certificates in development
+      },
+    } as nodemailer.TransportOptions);
   }
 
-  // Gunakan konfigurasi SMTP dari environment
-  return nodemailer.createTransport({
-    host: env.EMAIL_HOST,
-    port: env.EMAIL_PORT,
-    secure: env.EMAIL_PORT === 465, // true for 465, false for other ports
-    auth: {
-      user: env.EMAIL_USER,
-      pass: env.EMAIL_PASS,
-    },
-  });
-};
-
-// Transporter email
-const transporter = createTransport();
-
-// Verify email transporter
-transporter.verify((error) => {
-  if (error) {
-    logger.error("Email service error", { error });
-  } else {
-    logger.info("Email service is ready");
-  }
-});
-
-// Function untuk menambahkan helper Handlebars
-const registerHandlebarsHelpers = () => {
-  // Format tanggal: {{formatDate date format="DD/MM/YYYY"}}
-  handlebars.registerHelper("formatDate", function (date, options) {
-    const format = options.hash.format || "YYYY-MM-DD";
-    const dateObj = new Date(date);
-
-    // Format sederhana, bisa diganti dengan day.js/moment.js
-    const formatters: Record<string, (d: Date) => string> = {
-      "YYYY-MM-DD": (d) => d.toISOString().split("T")[0],
-      "DD/MM/YYYY": (d) =>
-        `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1)
-          .toString()
-          .padStart(2, "0")}/${d.getFullYear()}`,
-      "MMMM DD, YYYY": (d) =>
-        d.toLocaleDateString("id-ID", {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        }),
-    };
-
-    return formatters[format]
-      ? formatters[format](dateObj)
-      : dateObj.toISOString();
-  });
-
-  // Conditional: {{#if_eq value1 value2}} ... {{/if_eq}}
-  handlebars.registerHelper("if_eq", function (a, b, options) {
-    return a === b ? options.fn(this) : options.inverse(this);
-  });
-
-  // Truncate text: {{truncate text limit=100}}
-  handlebars.registerHelper("truncate", function (text, options) {
-    const limit = options.hash.limit || 100;
-    if (text.length <= limit) return text;
-    return text.substring(0, limit) + "...";
-  });
-};
-
-// Panggil fungsi untuk mendaftarkan helper
-registerHandlebarsHelpers();
-
-/**
- * Mendapatkan template email dari database
- */
-export const getTemplateFromDb = async (
-  templateName: string
-): Promise<EmailTemplate | null> => {
-  try {
-    const { data, error } = await supabase
-      .from("email_templates")
-      .select("*")
-      .eq("name", templateName)
-      .eq("is_active", true)
-      .single();
-
-    if (error) {
-      logger.error("Error fetching email template", { error, templateName });
-      return null;
-    }
-
-    return data;
-  } catch (error) {
-    logger.error("Failed to get email template", { error, templateName });
-    return null;
-  }
-};
-
-/**
- * Mendapatkan template dari file
- */
-export const getTemplateFromFile = async (
-  templateName: string
-): Promise<string | null> => {
-  try {
-    const templatePath = path.join(
-      __dirname,
-      `../templates/emails/${templateName}.hbs`
-    );
-    const template = await fs.readFile(templatePath, "utf8");
-    return template;
-  } catch (error) {
-    logger.error("Failed to read template file", { error, templateName });
-    return null;
-  }
-};
-
-/**
- * Kompilasi template dengan Handlebars
- */
-export const compileTemplate = (
-  template: string,
-  context: Record<string, any>
-): string => {
-  try {
-    const compiledTemplate = handlebars.compile(template);
-    return compiledTemplate(context);
-  } catch (error) {
-    logger.error("Failed to compile template", { error });
-    throw new Error("Template compilation failed");
-  }
-};
-
-/**
- * Mengirim email
- */
-export const sendEmail = async (options: EmailOptions): Promise<boolean> => {
-  try {
-    let finalOptions: nodemailer.SendMailOptions = {
-      from:
-        options.from ||
-        `"${env.APP_NAME || "Gamification CS"}" <${env.EMAIL_FROM}>`,
-      to: options.to,
-      subject: options.subject,
-      attachments: options.attachments,
-    };
-
-    // Jika template name disediakan, ambil dari database
-    if (options.template) {
-      const dbTemplate = await getTemplateFromDb(options.template);
-
-      if (dbTemplate) {
-        // Gunakan template dari database
-        finalOptions.subject = dbTemplate.subject;
-        const htmlContent = compileTemplate(
-          dbTemplate.body,
-          options.context || {}
-        );
-        finalOptions.html = htmlContent;
-      } else {
-        // Fallback ke template file
-        const fileTemplate = await getTemplateFromFile(options.template);
-
-        if (!fileTemplate) {
-          throw new Error(`Template not found: ${options.template}`);
-        }
-
-        const htmlContent = compileTemplate(
-          fileTemplate,
-          options.context || {}
-        );
-        finalOptions.html = htmlContent;
-        finalOptions.subject = options.subject;
+  /**
+   * Load email templates from filesystem or database
+   */
+  private async loadTemplates() {
+    try {
+      // Check if templates directory exists, create if not
+      if (!fs.existsSync(this.templatesDir)) {
+        fs.mkdirSync(this.templatesDir, { recursive: true });
+        this.createDefaultTemplates();
       }
-    } else if (options.html) {
-      // Gunakan HTML yang diberikan langsung
-      finalOptions.html = options.html;
-    } else if (options.text) {
-      // Gunakan plain text
-      finalOptions.text = options.text;
-    } else {
-      throw new Error("Email content not provided");
+
+      // Load templates from filesystem
+      const templateFiles = fs.readdirSync(this.templatesDir);
+
+      for (const file of templateFiles) {
+        if (file.endsWith(".hbs")) {
+          const templateName = file.replace(".hbs", "");
+          const templatePath = path.join(this.templatesDir, file);
+          const templateContent = fs.readFileSync(templatePath, "utf8");
+
+          this.templates.set(templateName, {
+            name: templateName,
+            subject: this.getSubjectFromTemplate(templateContent),
+            template: templateContent,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error loading email templates:", error);
+    }
+  }
+
+  /**
+   * Register handlebars helpers
+   */
+  private registerHelpers() {
+    // Helper for equality comparison
+    handlebars.registerHelper(
+      "if_eq",
+      function (this: any, a: any, b: any, options: any) {
+        return a === b ? options.fn(this) : options.inverse(this);
+      }
+    );
+
+    // Helper for non-equality comparison
+    handlebars.registerHelper(
+      "if_not_eq",
+      function (this: any, a: any, b: any, options: any) {
+        return a !== b ? options.fn(this) : options.inverse(this);
+      }
+    );
+
+    // Helper for dates
+    handlebars.registerHelper("formatDate", function (date: Date) {
+      if (!date) return "";
+      return new Date(date).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    });
+  }
+
+  /**
+   * Create default email templates if none exist
+   */
+  private createDefaultTemplates() {
+    const templates = [
+      {
+        name: "welcome",
+        fileName: "welcome.hbs",
+        content: `
+        <h1>Welcome to {{appName}}!</h1>
+        <p>Hello {{name}},</p>
+        <p>Thank you for creating an account with us. We're excited to have you join our community!</p>
+        <p>To get started, please verify your email by clicking the button below:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="{{verificationUrl}}" style="background-color: #4B7BEC; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Verify Email</a>
+        </div>
+        <p>If the button doesn't work, please copy and paste this link into your browser:</p>
+        <p>{{verificationUrl}}</p>
+        <p>Best regards,</p>
+        <p>The {{appName}} Team</p>
+        `,
+      },
+      {
+        name: "passwordReset",
+        fileName: "passwordReset.hbs",
+        content: `
+        <h1>Password Reset Request</h1>
+        <p>Hello {{name}},</p>
+        <p>We received a request to reset the password for your account. If you didn't make this request, you can safely ignore this email.</p>
+        <p>To reset your password, please click the button below:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="{{resetUrl}}" style="background-color: #4B7BEC; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
+        </div>
+        <p>If the button doesn't work, please copy and paste this link into your browser:</p>
+        <p>{{resetUrl}}</p>
+        <p>This link will expire in 1 hour.</p>
+        <p>Best regards,</p>
+        <p>The {{appName}} Team</p>
+        `,
+      },
+    ];
+
+    // Create templates directory if it doesn't exist
+    if (!fs.existsSync(this.templatesDir)) {
+      fs.mkdirSync(this.templatesDir, { recursive: true });
     }
 
-    // Kirim email
-    const info = await transporter.sendMail(finalOptions);
-
-    logger.info("Email sent successfully", {
-      messageId: info.messageId,
-      to: finalOptions.to,
-      subject: finalOptions.subject,
+    // Write each template file
+    templates.forEach((template) => {
+      const filePath = path.join(this.templatesDir, template.fileName);
+      fs.writeFileSync(filePath, template.content);
     });
-
-    return true;
-  } catch (error) {
-    logger.error("Failed to send email", {
-      error,
-      to: options.to,
-      subject: options.subject,
-    });
-    return false;
   }
-};
 
-/**
- * Contoh penggunaan:
- *
- * // Kirim email dengan template dari database
- * sendEmail({
- *   to: 'user@example.com',
- *   template: 'welcome',
- *   context: {
- *     name: 'John Doe',
- *     login_url: 'https://example.com/login'
- *   }
- * });
- *
- * // Kirim email dengan content HTML langsung
- * sendEmail({
- *   to: 'user@example.com',
- *   subject: 'Hello World',
- *   html: '<h1>Hello</h1><p>This is a test email</p>'
- * });
- */
+  /**
+   * Parse subject from template content (assumes first line has subject in format <!-- Subject: Your Subject -->)
+   */
+  private getSubjectFromTemplate(content: string): string {
+    const subjectMatch = content.match(/<!--\\s*Subject:\\s*(.*?)\\s*-->/);
+    return subjectMatch ? subjectMatch[1] : "Notification";
+  }
 
-export default {
-  sendEmail,
-  getTemplateFromDb,
-  getTemplateFromFile,
-  compileTemplate,
-};
+  /**
+   * Send email with template
+   */
+  public async sendEmail(options: SendEmailOptions): Promise<boolean> {
+    try {
+      const { to, subject, template, context, attachments } = options;
+
+      // Get template or use default
+      const templateData = this.templates.get(template);
+
+      if (!templateData) {
+        throw new Error(`Email template "${template}" not found`);
+      }
+
+      // Compile template with Handlebars
+      const compiledTemplate = handlebars.compile(templateData.template);
+      const html = compiledTemplate(context);
+
+      // Send email
+      const mailOptions = {
+        from: `"Gamification CS" <${env.EMAIL_FROM}>`,
+        to,
+        subject: subject || templateData.subject,
+        html,
+        attachments,
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log("Email sent:", info.messageId);
+      return true;
+    } catch (error) {
+      console.error("Error sending email:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Verify SMTP connection
+   */
+  public async verifyConnection(): Promise<boolean> {
+    try {
+      await this.transporter.verify();
+      console.log("Email server connection verified");
+      return true;
+    } catch (error) {
+      console.error("Email server connection failed:", error);
+      return false;
+    }
+  }
+}
+
+// Export singleton instance
+const emailService = new EmailService();
+export default emailService;

@@ -1,61 +1,90 @@
 import dotenv from "dotenv";
-import { z } from "zod";
+import path from "path";
 
 // Load environment variables from .env file
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-// Define schema for environment variables with validation
-const envSchema = z.object({
-  // Server Configuration
-  PORT: z.string().default("3001"),
-  NODE_ENV: z
-    .enum(["development", "production", "test"])
-    .default("development"),
-
-  // Supabase Configuration
-  SUPABASE_URL: z.string().url(),
-  SUPABASE_KEY: z.string().min(1),
-  SUPABASE_JWT_SECRET: z.string().min(1),
-
-  // JWT Configuration
-  JWT_SECRET: z.string().min(32),
-  JWT_EXPIRES_IN: z.string().default("1d"),
-  JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
-
-  // Email Configuration
-  EMAIL_HOST: z.string().min(1),
-  EMAIL_PORT: z.string().transform(Number),
-  EMAIL_USER: z.string().email(),
-  EMAIL_PASS: z.string().min(1),
-  EMAIL_FROM: z.string().email(),
-
-  // Redis Configuration (for caching, optional)
-  REDIS_URL: z.string().optional(),
-
-  // Logging
-  LOG_LEVEL: z
-    .enum(["error", "warn", "info", "http", "verbose", "debug", "silly"])
-    .default("info"),
-
-  // Security
-  CORS_ORIGINS: z.string().transform((value) => value.split(",")),
-  RATE_LIMIT_WINDOW_MS: z.string().transform(Number).default("900000"),
-  RATE_LIMIT_MAX: z.string().transform(Number).default("100"),
-});
-
-// Parse and validate environment variables
-const _env = envSchema.safeParse(process.env);
-
-// Handle validation errors
-if (!_env.success) {
-  console.error("❌ Invalid environment variables:");
-  console.error(_env.error.format());
-
-  throw new Error("Invalid environment variables");
+// Define environment variable types
+interface Environment {
+  PORT: string;
+  NODE_ENV: "development" | "production" | "test";
+  SUPABASE_URL: string;
+  SUPABASE_KEY: string;
+  SUPABASE_JWT_SECRET: string;
+  JWT_SECRET: string;
+  JWT_EXPIRES_IN: string;
+  JWT_REFRESH_EXPIRES_IN: string;
+  COOKIE_SECRET: string;
+  EMAIL_HOST: string;
+  EMAIL_PORT: string;
+  EMAIL_USER: string;
+  EMAIL_PASS: string;
+  EMAIL_FROM: string;
+  CORS_ORIGINS: string;
+  RATE_LIMIT_WINDOW_MS: number;
+  RATE_LIMIT_MAX: number;
+  LOG_LEVEL: string;
+  REDIS_URL?: string;
+  APP_NAME: string; // Add APP_NAME
 }
 
-// Export validated environment variables
-export const env = _env.data;
+// Helper function to ensure required environment variables are present
+const requiredEnvVars = [
+  "PORT",
+  "NODE_ENV",
+  "SUPABASE_URL",
+  "SUPABASE_KEY",
+  "SUPABASE_JWT_SECRET",
+  "JWT_SECRET",
+  "JWT_EXPIRES_IN",
+  "JWT_REFRESH_EXPIRES_IN",
+  "COOKIE_SECRET",
+  "EMAIL_HOST",
+  "EMAIL_PORT",
+  "EMAIL_USER",
+  "EMAIL_PASS",
+  "EMAIL_FROM",
+  "CORS_ORIGINS",
+  "LOG_LEVEL",
+];
 
-// Type definition for the environment variables
-export type Env = z.infer<typeof envSchema>;
+// Check if all required environment variables are present
+const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+  throw new Error(
+    `Missing required environment variables: ${missingEnvVars.join(", ")}`
+  );
+}
+
+// Parse and validate environment variables
+export const env: Environment = {
+  PORT: process.env.PORT || "3001",
+  NODE_ENV: (process.env.NODE_ENV as Environment["NODE_ENV"]) || "development",
+  SUPABASE_URL: process.env.SUPABASE_URL!,
+  SUPABASE_KEY: process.env.SUPABASE_KEY!,
+  SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET!,
+  JWT_SECRET: process.env.JWT_SECRET!,
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN!,
+  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN!,
+  COOKIE_SECRET: process.env.COOKIE_SECRET!,
+  EMAIL_HOST: process.env.EMAIL_HOST!,
+  EMAIL_PORT: process.env.EMAIL_PORT!,
+  EMAIL_USER: process.env.EMAIL_USER!,
+  EMAIL_PASS: process.env.EMAIL_PASS!,
+  EMAIL_FROM: process.env.EMAIL_FROM!,
+  CORS_ORIGINS: process.env.CORS_ORIGINS!,
+  RATE_LIMIT_WINDOW_MS: parseInt(
+    process.env.RATE_LIMIT_WINDOW_MS || "900000",
+    10
+  ),
+  RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX || "100", 10),
+  LOG_LEVEL: process.env.LOG_LEVEL || "info",
+  REDIS_URL: process.env.REDIS_URL,
+  APP_NAME: process.env.APP_NAME || "Gamification CS", // Add default value
+};
+
+// Parse CORS origins into array
+export const corsOrigins = env.CORS_ORIGINS.split(",");
+
+export default env;
