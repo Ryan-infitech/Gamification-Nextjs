@@ -1,273 +1,356 @@
 import Image from "next/image";
 import Link from "next/link";
-import MainLayout from "@/components/layout/MainLayout";
+import { Metadata } from "next";
+import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
+import { buttonVariants } from "@/components/ui/Button";
+import {
+  AnimatedDiv,
+  AnimatedSection,
+  containerVariants,
+  itemVariants,
+} from "@/components/ui/MotionComponents";
+// Import Lucide icons to replace the missing SVGs
+import {
+  Gamepad,
+  Code,
+  Trophy,
+  GitBranch,
+  Users,
+  Laptop,
+  Star,
+  Cloud,
+} from "lucide-react";
+
+// Overriding metadata for landing page
+export const metadata: Metadata = {
+  title: "Belajar Pemrograman Melalui Petualangan Game | Gamifikasi CS",
+  description:
+    "Belajar pemrograman dan computer science melalui pendekatan game yang menyenangkan dan interaktif. Dapatkan penghargaan dan capai level tertinggi sambil menguasai ilmu komputer!",
+};
+
+// Features data - updated to use Lucide icon components instead of SVG files
+const features = [
+  {
+    title: "Belajar Sambil Bermain",
+    description:
+      "Kuasai konsep programming dengan metode game-based learning yang mengasyikkan",
+    icon: <Gamepad size={24} className="text-primary" />,
+  },
+  {
+    title: "Tantangan Koding",
+    description: "Selesaikan tantangan koding interaktif dan dapatkan rewards",
+    icon: <Code size={24} className="text-primary" />,
+  },
+  {
+    title: "Jalur Belajar Terstruktur",
+    description:
+      "Ikuti learning path yang disesuaikan dengan level kemampuanmu",
+    icon: <GitBranch size={24} className="text-primary" />,
+  },
+  {
+    title: "Dapatkan Achievement",
+    description: "Kumpulkan badge dan achievement untuk menunjukkan kemajuanmu",
+    icon: <Trophy size={24} className="text-primary" />,
+  },
+  {
+    title: "Kompetisi Multiplayer",
+    description: "Tantang teman dan jadilah yang terbaik di leaderboard",
+    icon: <Users size={24} className="text-primary" />,
+  },
+  {
+    title: "Akses di Mana Saja",
+    description: "Belajar dari perangkat apa saja, kapan saja, di mana saja",
+    icon: <Laptop size={24} className="text-primary" />,
+  },
+];
 
 export default function Home() {
   return (
-    <MainLayout>
-      <div className="relative overflow-hidden">
-        {/* Hero Section */}
-        <section className="relative min-h-[80vh] flex items-center">
-          {/* Animated background grid */}
-          <div className="absolute inset-0 bg-[var(--darker-bg)] z-0">
-            <div className="relative h-full w-full">
-              {/* Grid lines */}
-              <div
-                className="absolute inset-0"
-                style={{
-                  backgroundImage: `
-                    linear-gradient(to right, var(--neon-blue) 1px, transparent 1px),
-                    linear-gradient(to bottom, var(--neon-blue) 1px, transparent 1px)
-                  `,
-                  backgroundSize: "40px 40px",
-                  opacity: 0.15,
-                  transform: "perspective(500px) rotateX(60deg)",
-                  transformOrigin: "center bottom",
-                }}
-              />
+    <div className="flex flex-col min-h-screen">
+      <Header />
 
-              {/* Moving light */}
-              <div
-                className="absolute top-1/2 left-1/2 w-[40vw] h-[40vh] rounded-full bg-gradient-radial from-[var(--neon-blue)] to-transparent opacity-5 blur-3xl"
-                style={{
-                  animation: "move 8s infinite alternate ease-in-out",
-                }}
-              />
+      {/* Hero Section */}
+      <main className="flex-grow">
+        <section className="relative h-[85vh] min-h-[600px] flex items-center overflow-hidden">
+          {/* Animated Background */}
+          <div className="absolute inset-0 z-0">
+            <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-background z-10" />
+            <div className="bg-grid-pattern opacity-20 absolute inset-0" />
 
-              {/* Animated lines */}
-              <style jsx>{`
-                @keyframes move {
-                  0% {
-                    transform: translate(-30%, -30%);
-                  }
-                  100% {
-                    transform: translate(30%, 30%);
-                  }
-                }
-              `}</style>
+            {/* Pixel art elements in background - replaced with Lucide icons */}
+            <div className="absolute -bottom-16 -left-16 w-64 h-64 opacity-30 animate-float">
+              <Cloud size={128} className="text-primary/30" />
+            </div>
+            <div className="absolute top-24 right-24 w-32 h-32 opacity-30 animate-float-delayed">
+              <Star size={64} className="text-primary/30" />
             </div>
           </div>
 
-          <div className="container-cyber relative z-10 px-4 flex flex-col lg:flex-row items-center gap-8 lg:gap-16">
-            {/* Text content */}
-            <div className="flex-1 text-center lg:text-left pt-12 lg:pt-0">
-              <h1 className="font-bold text-5xl lg:text-6xl mb-6 tracking-tight">
-                <span className="block">Master Coding Through</span>
-                <span className="relative inline-block text-[var(--neon-blue)] neon-text">
-                  Pixel Adventures
-                </span>
-              </h1>
-
-              <p className="text-gray-300 text-xl mb-8 max-w-2xl mx-auto lg:mx-0">
-                Learn algorithms, data structures, and computer science concepts
-                in a gamified cyberpunk pixel world. Solve puzzles, defeat
-                bosses, level up your skills.
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                <Link
-                  href="/game"
-                  className="cyber-button-alt text-base py-3 px-8"
-                >
-                  Start Playing
-                </Link>
-                <Link
-                  href="/learn"
-                  className="cyber-button text-base py-3 px-8"
-                >
-                  Explore Concepts
-                </Link>
-              </div>
-
-              <div className="mt-8 font-[family-name:var(--font-geist-mono)] text-sm text-gray-400 flex items-center justify-center lg:justify-start gap-6">
-                <div className="flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 bg-[var(--neon-green)] rounded-full"></span>
-                  <span>40+ Challenges</span>
+          <div className="container mx-auto px-4 z-10 mt-10">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-center">
+              {/* Text content */}
+              <AnimatedDiv
+                className="lg:col-span-3 text-center lg:text-left"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                <h1 className="font-pixel-heading text-3xl md:text-4xl lg:text-5xl leading-tight mb-6 text-gradient">
+                  Jelajahi Dunia Computer Science dengan Bermain Game
+                </h1>
+                <p className="text-xl md:text-2xl mb-8 font-pixel-body max-w-2xl mx-auto lg:mx-0">
+                  Platform belajar pemrograman interaktif dengan pendekatan
+                  gamifikasi. Kuasai konsep-konsep fundamental dengan cara yang
+                  menyenangkan!
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+                  <Link
+                    href="/register"
+                    className={buttonVariants({
+                      size: "lg",
+                      variant: "default",
+                      className: "font-pixel-body text-lg px-8 py-6 h-auto",
+                    })}
+                  >
+                    Mulai Petualangan
+                  </Link>
+                  <Link
+                    href="/about"
+                    className={buttonVariants({
+                      size: "lg",
+                      variant: "outline",
+                      className: "font-pixel-body text-lg px-8 py-6 h-auto",
+                    })}
+                  >
+                    Pelajari Selengkapnya
+                  </Link>
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 bg-[var(--neon-pink)] rounded-full"></span>
-                  <span>Real-time Multiplayer</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 bg-[var(--neon-blue)] rounded-full"></span>
-                  <span>5 Themed Worlds</span>
-                </div>
-              </div>
-            </div>
+              </AnimatedDiv>
 
-            {/* Game screenshot/preview */}
-            <div className="flex-1 w-full max-w-lg">
-              <div className="pixel-corners relative">
-                <div className="glitch-wrapper">
-                  <div className="glitch">
-                    <Image
-                      src="/game-preview.png"
-                      alt="Game Preview"
-                      width={600}
-                      height={400}
-                      className="rounded"
-                      style={{ objectFit: "cover" }}
-                      priority
-                    />
+              {/* Hero Image */}
+              <AnimatedDiv
+                className="lg:col-span-2 flex justify-center"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+              >
+                <div className="relative w-full max-w-md aspect-square">
+                  {/* Using a solid background with a character emoji as a temporary placeholder */}
+                  <div className="w-full h-full bg-primary/10 rounded-full flex items-center justify-center text-8xl animate-float">
+                    🧙‍♂️
                   </div>
                 </div>
+              </AnimatedDiv>
+            </div>
+          </div>
+        </section>
 
-                {/* Decorative elements */}
-                <div className="absolute -top-3 -right-3 w-12 h-12 border-t-2 border-r-2 border-[var(--neon-pink)]"></div>
-                <div className="absolute -bottom-3 -left-3 w-12 h-12 border-b-2 border-l-2 border-[var(--neon-pink)]"></div>
+        {/* Stats Section */}
+        <section className="bg-primary/5 border-y border-primary/20 py-10">
+          <div className="container mx-auto px-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+              <div className="p-4">
+                <p className="font-pixel-heading text-3xl md:text-4xl text-primary">
+                  1000+
+                </p>
+                <p className="font-pixel-body text-lg mt-2">Challenges</p>
+              </div>
+              <div className="p-4">
+                <p className="font-pixel-heading text-3xl md:text-4xl text-primary">
+                  50+
+                </p>
+                <p className="font-pixel-body text-lg mt-2">Learning Paths</p>
+              </div>
+              <div className="p-4">
+                <p className="font-pixel-heading text-3xl md:text-4xl text-primary">
+                  100+
+                </p>
+                <p className="font-pixel-body text-lg mt-2">Achievement</p>
+              </div>
+              <div className="p-4">
+                <p className="font-pixel-heading text-3xl md:text-4xl text-primary">
+                  10.000+
+                </p>
+                <p className="font-pixel-body text-lg mt-2">Learners</p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Features Section */}
-        <section className="py-20 bg-[var(--dark-bg)]">
-          <div className="container-cyber px-4">
-            <h2 className="text-center text-4xl font-bold mb-16 neon-text-purple">
-              Learn Programming Through{" "}
-              <span className="text-[var(--neon-pink)]">Adventure</span>
-            </h2>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {/* Feature 1 */}
-              <div className="feature-card bg-[var(--dark-surface)] p-6 rounded relative overflow-hidden group">
-                <div className="absolute inset-0 bg-gradient-to-br from-[rgba(0,240,255,0.1)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="w-12 h-12 mb-4 flex items-center justify-center bg-[var(--darker-bg)] rounded text-[var(--neon-blue)]">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-6 h-6"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z"
-                    />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold mb-2">Interactive Coding</h3>
-                <p className="text-gray-400">
-                  Solve programming challenges with real-time feedback in an
-                  immersive environment.
-                </p>
-                <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-[var(--neon-blue)] to-[var(--neon-purple)]"></div>
-              </div>
-
-              {/* Feature 2 */}
-              <div className="feature-card bg-[var(--dark-surface)] p-6 rounded relative overflow-hidden group">
-                <div className="absolute inset-0 bg-gradient-to-br from-[rgba(123,97,255,0.1)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="w-12 h-12 mb-4 flex items-center justify-center bg-[var(--darker-bg)] rounded text-[var(--neon-purple)]">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-6 h-6"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"
-                    />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold mb-2">Game-Based Learning</h3>
-                <p className="text-gray-400">
-                  Master CS concepts through boss battles, puzzles, and
-                  adventure-style quests.
-                </p>
-                <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-[var(--neon-purple)] to-[var(--neon-pink)]"></div>
-              </div>
-
-              {/* Feature 3 */}
-              <div className="feature-card bg-[var(--dark-surface)] p-6 rounded relative overflow-hidden group">
-                <div className="absolute inset-0 bg-gradient-to-br from-[rgba(255,0,255,0.1)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="w-12 h-12 mb-4 flex items-center justify-center bg-[var(--darker-bg)] rounded text-[var(--neon-pink)]">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-6 h-6"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                    />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold mb-2">Community Challenges</h3>
-                <p className="text-gray-400">
-                  Compete with friends, join leaderboards, and collaborate on
-                  multiplayer puzzles.
-                </p>
-                <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-[var(--neon-pink)] to-[var(--neon-blue)]"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Call to Action */}
-        <section className="py-20 bg-[var(--darker-bg)] relative">
-          <div className="absolute inset-0 overflow-hidden">
-            <div
-              className="absolute inset-0 opacity-10"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300f0ff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-              }}
-            ></div>
-          </div>
-
-          <div className="container-cyber relative z-10 px-4 text-center">
-            <h2 className="text-4xl font-bold mb-6 neon-text">
-              Ready to Begin Your Coding Journey?
-            </h2>
-            <p className="text-gray-300 text-xl mb-12 max-w-3xl mx-auto">
-              Join thousands of players who are learning computer science while
-              having fun in our cyberpunk pixel universe.
-            </p>
-            <Link
-              href="/register"
-              className="cyber-button-alt text-base py-3 px-10"
+        {/* Features Section - Updated to use Lucide icon components */}
+        <section className="py-20 bg-background">
+          <div className="container mx-auto px-4">
+            <AnimatedDiv
+              className="text-center mb-16"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
             >
-              Create Free Account
-            </Link>
+              <h2 className="font-pixel-heading text-3xl mb-4">
+                Fitur Unggulan
+              </h2>
+              <p className="font-pixel-body text-xl max-w-2xl mx-auto">
+                Platform kami menawarkan berbagai fitur yang dirancang untuk
+                membuat proses belajar pemrograman menjadi menyenangkan dan
+                efektif
+              </p>
+            </AnimatedDiv>
 
-            <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-8">
-              <div className="stat-box">
-                <div className="text-4xl font-bold text-[var(--neon-blue)]">
-                  40+
+            <AnimatedDiv
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+              variants={containerVariants}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true }}
+            >
+              {features.map((feature, index) => (
+                <AnimatedDiv
+                  key={index}
+                  className="bg-card p-6 rounded-lg border-2 border-border hover:border-primary/50 transition-all duration-300 hover:shadow-glow"
+                  variants={itemVariants}
+                >
+                  <div className="w-12 h-12 mb-4 bg-primary/10 rounded-md flex items-center justify-center">
+                    {feature.icon}
+                  </div>
+                  <h3 className="font-pixel-heading text-xl mb-2">
+                    {feature.title}
+                  </h3>
+                  <p className="font-pixel-body">{feature.description}</p>
+                </AnimatedDiv>
+              ))}
+            </AnimatedDiv>
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section className="py-20 bg-primary/10">
+          <div className="container mx-auto px-4">
+            <div className="max-w-4xl mx-auto text-center">
+              <AnimatedDiv
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5 }}
+              >
+                <h2 className="font-pixel-heading text-3xl mb-4">
+                  Siap Untuk Memulai Petualanganmu?
+                </h2>
+                <p className="font-pixel-body text-xl mb-8">
+                  Daftar sekarang dan mulai perjalananmu dalam menaklukkan dunia
+                  coding!
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Link
+                    href="/auth/register"
+                    className={buttonVariants({
+                      size: "lg",
+                      variant: "default",
+                      className: "font-pixel-body text-lg px-8",
+                    })}
+                  >
+                    Daftar Gratis
+                  </Link>
+                  <Link
+                    href="/auth/login"
+                    className={buttonVariants({
+                      size: "lg",
+                      variant: "outline",
+                      className: "font-pixel-body text-lg px-8",
+                    })}
+                  >
+                    Login
+                  </Link>
                 </div>
-                <div className="text-gray-400">Learning Challenges</div>
+              </AnimatedDiv>
+            </div>
+          </div>
+        </section>
+
+        {/* Testimonials Section */}
+        <section className="py-20 bg-background">
+          <div className="container mx-auto px-4">
+            <AnimatedDiv
+              className="text-center mb-16"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+            >
+              <h2 className="font-pixel-heading text-3xl mb-4">
+                Apa Kata Mereka?
+              </h2>
+              <p className="font-pixel-body text-xl max-w-2xl mx-auto">
+                Dengarkan pengalaman para petualang yang telah menggunakan
+                platform kami
+              </p>
+            </AnimatedDiv>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Testimonial cards would go here */}
+              {/* This is a placeholder for future testimonial implementation */}
+              <div className="bg-card p-6 rounded-lg border-2 border-border">
+                <div className="flex items-center mb-4">
+                  <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center mr-4">
+                    <span className="font-pixel-heading text-primary">B</span>
+                  </div>
+                  <div>
+                    <h4 className="font-pixel-heading text-lg">Budi Santoso</h4>
+                    <p className="font-pixel-body text-sm text-muted-foreground">
+                      Mahasiswa
+                    </p>
+                  </div>
+                </div>
+                <p className="font-pixel-body">
+                  "Platform ini membantu saya memahami konsep-konsep programming
+                  yang sulit dengan cara yang menyenangkan!"
+                </p>
               </div>
-              <div className="stat-box">
-                <div className="text-4xl font-bold text-[var(--neon-pink)]">
-                  5K+
+
+              <div className="bg-card p-6 rounded-lg border-2 border-border">
+                <div className="flex items-center mb-4">
+                  <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center mr-4">
+                    <span className="font-pixel-heading text-primary">A</span>
+                  </div>
+                  <div>
+                    <h4 className="font-pixel-heading text-lg">Ani Wijaya</h4>
+                    <p className="font-pixel-body text-sm text-muted-foreground">
+                      Pelajar SMA
+                    </p>
+                  </div>
                 </div>
-                <div className="text-gray-400">Active Players</div>
+                <p className="font-pixel-body">
+                  "Belajar coding ternyata bisa sangat menyenangkan! Saya tidak
+                  sabar untuk menyelesaikan semua level."
+                </p>
               </div>
-              <div className="stat-box">
-                <div className="text-4xl font-bold text-[var(--neon-purple)]">
-                  300+
+
+              <div className="bg-card p-6 rounded-lg border-2 border-border">
+                <div className="flex items-center mb-4">
+                  <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center mr-4">
+                    <span className="font-pixel-heading text-primary">D</span>
+                  </div>
+                  <div>
+                    <h4 className="font-pixel-heading text-lg">
+                      Deni Kurniawan
+                    </h4>
+                    <p className="font-pixel-body text-sm text-muted-foreground">
+                      Guru Informatika
+                    </p>
+                  </div>
                 </div>
-                <div className="text-gray-400">Coding Problems</div>
-              </div>
-              <div className="stat-box">
-                <div className="text-4xl font-bold text-[var(--neon-green)]">
-                  50K+
-                </div>
-                <div className="text-gray-400">Lines Coded</div>
+                <p className="font-pixel-body">
+                  "Saya menggunakan platform ini untuk mengajar siswa saya.
+                  Mereka menjadi jauh lebih antusias belajar programming!"
+                </p>
               </div>
             </div>
           </div>
         </section>
-      </div>
-    </MainLayout>
+      </main>
+
+      <Footer />
+    </div>
   );
 }
