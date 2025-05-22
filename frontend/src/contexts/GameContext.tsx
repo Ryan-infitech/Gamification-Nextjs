@@ -1,615 +1,753 @@
-"use client";
+'use client';
 
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useReducer,
-  useState,
-} from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { socketManager } from "@/lib/socket";
-import {
-  GameState,
-  GameAction,
-  Player,
-  GameArea,
-  Challenge,
-  GameEvent,
-} from "@/types/game";
+import React, { createContext, useEffect, useState, useRef, ReactNode } from 'react';
+import axios from 'axios';
+import { useRouter } from 'next/navigation';
+import { setupSocketClient, disconnectSocket } from '@/lib/socket';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/useToast';
+import { 
+  PlayerData, 
+  MapArea, 
+  GamePosition, 
+  GameChallengeDefinition, 
+  NPCDefinition 
+} from '@/types/phaser';
 
-// Initial game state
-const initialGameState: GameState = {
-  player: {
-    position: { x: 0, y: 0 },
-    direction: "down",
-    speed: 160,
-    stats: {
-      level: 1,
-      xp: 0,
-      coins: 0,
-      health: 100,
-      maxHealth: 100,
-      codingSkill: 1,
-      problemSolving: 1,
-    },
-    inventory: [],
-    currentAreaId: null,
-    isMoving: false,
-  },
-  gameAreas: [],
+export interface Notification {
+  id: string;
+  type: 'achievement' | 'level' | 'quest' | 'item' | 'system';
+  title: string;
+  message: string;
+  read: boolean;
+  timestamp: number;
+}
+
+// Game state interface
+export interface GameState {
+  isInitialized: boolean;
+  isLoading: boolean;
+  isPlaying: boolean;
+  isPaused: boolean;
+  playerData: PlayerData | null;
+  currentMap: string;
+  currentArea: MapArea | null;
+  activeChallenges: GameChallengeDefinition[];
+  completedChallenges: string[];
+  interactingWith: NPCDefinition | null;
+  inventory: any[];
+  quests: any[];
+  notifications: Notification[];
+  settings: {
+    soundEnabled: boolean;
+    musicEnabled: boolean;
+    musicVolume: number;
+    sfxVolume: number;
+    showTutorial: boolean;
+    difficulty: 'easy' | 'normal' | 'hard';
+  };
+  players: {
+    [userId: string]: {
+      id: string;
+      username: string;
+      position: GamePosition;
+      sprite: string;
+      lastUpdated: number;
+    }
+  };
+  lastSaved: string | null;
+  error: string | null;
+}
+
+// Interface for the context value
+export interface GameContextType {
+  state: GameState;
+  initGame: () => Promise<void>;
+  startGame: (continueGame?: boolean) => void;
+  pauseGame: () => void;
+  resumeGame: () => void;
+  exitGame: () => void;
+  saveGameState: () => Promise<boolean>;
+  updatePlayerPosition: (position: GamePosition) => void;
+  setCurrentMap: (mapKey: string) => void;
+  enterArea: (area: MapArea) => void;
+  leaveArea: () => void;
+  startChallenge: (challenge: GameChallengeDefinition) => void;
+  completeChallenge: (challengeId: string, data?: any) => Promise<void>;
+  interactWithNPC: (npc: NPCDefinition | null) => void;
+  addItem: (item: any) => void;
+  removeItem: (itemId: string) => void;
+  updateSettings: (settings: Partial<GameState['settings']>) => void;
+  markNotificationAsRead: (notificationId: string) => void;
+  clearAllNotifications: () => void;
+  addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
+  resetGameState: () => void;
+}
+
+// Default game state
+const defaultGameState: GameState = {
+  isInitialized: false,
+  isLoading: false,
+  isPlaying: false,
+  isPaused: false,
+  playerData: null,
+  currentMap: 'tutorial-area',
   currentArea: null,
-  otherPlayers: new Map(),
-  challenges: [],
-  currentChallenge: null,
-  events: [],
+  activeChallenges: [],
+  completedChallenges: [],
+  interactingWith: null,
+  inventory: [],
+  quests: [],
+  notifications: [],
   settings: {
     soundEnabled: true,
+    musicEnabled: true,
     musicVolume: 0.7,
     sfxVolume: 1.0,
-    pixelPerfect: true,
-    showFps: false,
+    showTutorial: true,
+    difficulty: 'normal'
   },
-  status: {
-    isInitialized: false,
-    isLoading: true,
-    isConnected: false,
-    lastSyncTime: null,
-    error: null,
-  },
+  players: {},
+  lastSaved: null,
+  error: null
 };
 
-// Reducer to handle game state updates
-function gameReducer(state: GameState, action: GameAction): GameState {
-  switch (action.type) {
-    case "INITIALIZE_GAME":
-      return {
-        ...state,
-        player: {
-          ...state.player,
-          ...action.payload.player,
-        },
-        gameAreas: action.payload.gameAreas || [],
-        status: {
-          ...state.status,
-          isInitialized: true,
-          isLoading: false,
-        },
-      };
+// Create the context with a default value
+export const GameContext = createContext<GameContextType>({
+  state: defaultGameState,
+  initGame: async () => {},
+  startGame: () => {},
+  pauseGame: () => {},
+  resumeGame: () => {},
+  exitGame: () => {},
+  saveGameState: async () => false,
+  updatePlayerPosition: () => {},
+  setCurrentMap: () => {},
+  enterArea: () => {},
+  leaveArea: () => {},
+  startChallenge: () => {},
+  completeChallenge: async () => {},
+  interactWithNPC: () => {},
+  addItem: () => {},
+  removeItem: () => {},
+  updateSettings: () => {},
+  markNotificationAsRead: () => {},
+  clearAllNotifications: () => {},
+  addNotification: () => {},
+  resetGameState: () => {},
+});
 
-    case "UPDATE_PLAYER_POSITION":
-      return {
-        ...state,
-        player: {
-          ...state.player,
-          position: action.payload.position,
-          direction: action.payload.direction || state.player.direction,
-          isMoving:
-            action.payload.isMoving !== undefined
-              ? action.payload.isMoving
-              : state.player.isMoving,
-        },
-      };
-
-    case "UPDATE_PLAYER_STATS":
-      return {
-        ...state,
-        player: {
-          ...state.player,
-          stats: {
-            ...state.player.stats,
-            ...action.payload,
-          },
-        },
-      };
-
-    case "CHANGE_AREA":
-      return {
-        ...state,
-        player: {
-          ...state.player,
-          currentAreaId: action.payload.areaId,
-          position: action.payload.position || state.player.position,
-        },
-        currentArea: action.payload.areaData || null,
-        otherPlayers: new Map(), // Reset other players when changing areas
-      };
-
-    case "UPDATE_OTHER_PLAYER":
-      const updatedPlayers = new Map(state.otherPlayers);
-      if (action.payload.data) {
-        updatedPlayers.set(action.payload.id, {
-          ...updatedPlayers.get(action.payload.id),
-          ...action.payload.data,
-        });
-      } else {
-        updatedPlayers.delete(action.payload.id);
-      }
-
-      return {
-        ...state,
-        otherPlayers: updatedPlayers,
-      };
-
-    case "START_CHALLENGE":
-      return {
-        ...state,
-        currentChallenge: action.payload,
-      };
-
-    case "END_CHALLENGE":
-      return {
-        ...state,
-        currentChallenge: null,
-      };
-
-    case "ADD_ITEM_TO_INVENTORY":
-      return {
-        ...state,
-        player: {
-          ...state.player,
-          inventory: [...state.player.inventory, action.payload],
-        },
-      };
-
-    case "REMOVE_ITEM_FROM_INVENTORY":
-      return {
-        ...state,
-        player: {
-          ...state.player,
-          inventory: state.player.inventory.filter(
-            (item) => item.id !== action.payload.id
-          ),
-        },
-      };
-
-    case "ADD_GAME_EVENT":
-      const newEvent: GameEvent = {
-        id: `event-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        timestamp: new Date(),
-        ...action.payload,
-      };
-
-      return {
-        ...state,
-        events: [newEvent, ...state.events].slice(0, 50), // Keep last 50 events
-      };
-
-    case "UPDATE_CONNECTION_STATUS":
-      return {
-        ...state,
-        status: {
-          ...state.status,
-          isConnected: action.payload,
-        },
-      };
-
-    case "UPDATE_GAME_SETTINGS":
-      return {
-        ...state,
-        settings: {
-          ...state.settings,
-          ...action.payload,
-        },
-      };
-
-    case "SET_ERROR":
-      return {
-        ...state,
-        status: {
-          ...state.status,
-          error: action.payload,
-        },
-      };
-
-    case "CLEAR_ERROR":
-      return {
-        ...state,
-        status: {
-          ...state.status,
-          error: null,
-        },
-      };
-
-    default:
-      return state;
-  }
+interface GameProviderProps {
+  children: ReactNode;
 }
 
-// Create context with TypeScript interface
-interface GameContextType {
-  state: GameState;
-  dispatch: React.Dispatch<GameAction>;
-  movePlayer: (
-    x: number,
-    y: number,
-    direction?: string,
-    isMoving?: boolean
-  ) => void;
-  changeArea: (areaId: string, position?: { x: number; y: number }) => void;
-  startChallenge: (challenge: Challenge) => void;
-  endChallenge: (results?: any) => void;
-  addItemToInventory: (item: any) => void;
-  removeItemFromInventory: (itemId: string) => void;
-  updatePlayerStats: (stats: Partial<GameState["player"]["stats"]>) => void;
-  updateGameSettings: (settings: Partial<GameState["settings"]>) => void;
-  sendChatMessage: (message: string, isGlobal?: boolean) => void;
-  interactWithNPC: (npcId: string) => void;
-}
-
-const defaultContextValue: GameContextType = {
-  state: initialGameState,
-  dispatch: () => null,
-  movePlayer: () => null,
-  changeArea: () => null,
-  startChallenge: () => null,
-  endChallenge: () => null,
-  addItemToInventory: () => null,
-  removeItemFromInventory: () => null,
-  updatePlayerStats: () => null,
-  updateGameSettings: () => null,
-  sendChatMessage: () => null,
-  interactWithNPC: () => null,
-};
-
-// Create the context
-const GameContext = createContext<GameContextType>(defaultContextValue);
-
-// Provider component
-export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [state, dispatch] = useReducer(gameReducer, initialGameState);
+export const GameProvider = ({ children }: GameProviderProps) => {
+  const [state, setState] = useState<GameState>(defaultGameState);
+  const socket = useRef<any>(null);
+  const gameStateRef = useRef<GameState>(defaultGameState);
+  const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const router = useRouter();
   const { user, isAuthenticated } = useAuth();
-  const [socket, setSocket] = useState<any>(null);
-
-  // Initialize the game when the component mounts
+  const { toast } = useToast();
+  
+  // Update ref whenever state changes
   useEffect(() => {
-    if (isAuthenticated && user) {
-      initializeGame();
+    gameStateRef.current = state;
+  }, [state]);
+  
+  // Initialize game state from backend
+  const initGame = async () => {
+    if (!isAuthenticated || !user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to play the game",
+        variant: "destructive"
+      });
+      return;
     }
-  }, [isAuthenticated, user]);
-
-  // Initialize socket connection when the user is authenticated
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      // Initialize socket connection
-      const socketClient = socketManager.connect(user.token);
-      setSocket(socketClient);
-
-      // Listen for connection events
-      socketClient.on("connect", () => {
-        dispatch({ type: "UPDATE_CONNECTION_STATUS", payload: true });
-        dispatch({
-          type: "ADD_GAME_EVENT",
-          payload: { type: "system", message: "Connected to server" },
-        });
+    
+    try {
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
+      
+      // Fetch game state from backend
+      const response = await axios.get('/api/game/state');
+      
+      // Setup socket connection after successful state fetch
+      if (!socket.current) {
+        socket.current = setupSocketClient();
+        
+        // Setup socket event listeners
+        setupSocketListeners();
+      }
+      
+      // Merge server state with local default state
+      const serverState = response.data;
+      setState(prev => ({
+        ...prev,
+        isInitialized: true,
+        isLoading: false,
+        playerData: serverState.playerData || defaultGameState.playerData,
+        currentMap: serverState.currentMap || defaultGameState.currentMap,
+        completedChallenges: serverState.completedChallenges || [],
+        inventory: serverState.inventory || [],
+        quests: serverState.quests || [],
+        settings: {
+          ...defaultGameState.settings,
+          ...serverState.settings
+        },
+        lastSaved: serverState.lastSaved || new Date().toISOString()
+      }));
+      
+    } catch (error) {
+      console.error("Failed to initialize game state:", error);
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: "Failed to load game data. Please try again."
+      }));
+      
+      toast({
+        title: "Game Initialization Failed",
+        description: "Could not load your game data. Please try again.",
+        variant: "destructive"
       });
-
-      socketClient.on("disconnect", () => {
-        dispatch({ type: "UPDATE_CONNECTION_STATUS", payload: false });
-        dispatch({
-          type: "ADD_GAME_EVENT",
-          payload: { type: "system", message: "Disconnected from server" },
-        });
+    }
+  };
+  
+  // Start the game session
+  const startGame = (continueGame = false) => {
+    if (!state.isInitialized) {
+      toast({
+        title: "Game Not Initialized",
+        description: "Please wait for the game to initialize",
+        variant: "destructive"
       });
-
-      // Player related events
-      socketClient.on("player:moved", (data: any) => {
-        if (data.userId !== user.id) {
-          dispatch({
-            type: "UPDATE_OTHER_PLAYER",
-            payload: {
-              id: data.userId,
-              data: {
-                position: data.position,
-                direction: data.animation?.split("-")?.pop() || "down",
-                isMoving: true,
-                lastUpdated: Date.now(),
-              },
-            },
-          });
-        }
+      return;
+    }
+    
+    // Emit player joined event to socket server
+    if (socket.current && user) {
+      socket.current.emit('playerJoined', {
+        userId: user.id,
+        username: user.username,
+        map: state.currentMap
       });
-
-      socketClient.on("player:joined", (data: any) => {
-        dispatch({
-          type: "UPDATE_OTHER_PLAYER",
-          payload: {
-            id: data.userId,
-            data: {
-              username: data.username,
-              position: data.position,
-              direction: "down",
-              isMoving: false,
-              lastUpdated: Date.now(),
-            },
-          },
-        });
-
-        dispatch({
-          type: "ADD_GAME_EVENT",
-          payload: {
-            type: "player",
-            message: `${data.username} joined the area`,
-          },
-        });
+    }
+    
+    // Start auto-save interval
+    if (autoSaveIntervalRef.current === null) {
+      autoSaveIntervalRef.current = setInterval(() => {
+        saveGameState();
+      }, 60000); // Auto-save every minute
+    }
+    
+    setState(prev => ({
+      ...prev,
+      isPlaying: true,
+      isPaused: false
+    }));
+    
+    // Initial save
+    saveGameState();
+  };
+  
+  // Pause the game
+  const pauseGame = () => {
+    setState(prev => ({ ...prev, isPaused: true }));
+    
+    // Could emit event that player is AFK/paused
+    if (socket.current && user) {
+      socket.current.emit('playerStatus', {
+        userId: user.id,
+        status: 'idle'
       });
-
-      socketClient.on("player:left", (data: any) => {
-        dispatch({
-          type: "UPDATE_OTHER_PLAYER",
-          payload: { id: data.userId, data: null },
-        });
+    }
+  };
+  
+  // Resume the game
+  const resumeGame = () => {
+    setState(prev => ({ ...prev, isPaused: false }));
+    
+    // Could emit event that player is active again
+    if (socket.current && user) {
+      socket.current.emit('playerStatus', {
+        userId: user.id,
+        status: 'active'
       });
-
-      socketClient.on("area:players", (data: any) => {
-        // Add all existing players in this area
-        data.players.forEach((player: any) => {
-          dispatch({
-            type: "UPDATE_OTHER_PLAYER",
-            payload: {
-              id: player.userId,
-              data: {
-                username: player.username,
-                position: player.position,
-                direction: "down",
-                isMoving: false,
-                lastUpdated: Date.now(),
-              },
-            },
-          });
-        });
+    }
+  };
+  
+  // Exit the game (cleanup)
+  const exitGame = () => {
+    setState(prev => ({
+      ...prev,
+      isPlaying: false,
+      isPaused: false
+    }));
+    
+    // Clear auto-save interval
+    if (autoSaveIntervalRef.current) {
+      clearInterval(autoSaveIntervalRef.current);
+      autoSaveIntervalRef.current = null;
+    }
+    
+    // Save game state before exiting
+    saveGameState();
+    
+    // Emit player left event to socket server
+    if (socket.current && user) {
+      socket.current.emit('playerLeft', {
+        userId: user.id
       });
-
-      // Chat related events
-      socketClient.on("chat:message", (data: any) => {
-        dispatch({
-          type: "ADD_GAME_EVENT",
-          payload: {
-            type: "chat",
-            message: data.message,
-            sender: data.senderName,
-            isGlobal: data.isGlobal,
-          },
-        });
-      });
-
-      // Challenge related events
-      socketClient.on("challenge:started", (data: any) => {
-        dispatch({ type: "START_CHALLENGE", payload: data.challenge });
-      });
-
-      socketClient.on("challenge:completed", (data: any) => {
-        // Update player stats with rewards
-        if (data.rewards) {
-          dispatch({
-            type: "UPDATE_PLAYER_STATS",
-            payload: {
-              xp: state.player.stats.xp + data.rewards.xp,
-              coins: state.player.stats.coins + data.rewards.coins,
-              level: data.rewards.level || state.player.stats.level,
-            },
-          });
-        }
-
-        dispatch({ type: "END_CHALLENGE" });
-
-        dispatch({
-          type: "ADD_GAME_EVENT",
-          payload: {
-            type: "achievement",
-            message: `Challenge completed: ${data.challenge?.title}`,
-          },
-        });
-      });
-
-      // Handle errors
-      socketClient.on("error", (error: any) => {
-        dispatch({ type: "SET_ERROR", payload: error.message });
-      });
-
-      // Clean up socket connection when the component unmounts
-      return () => {
-        socketClient.disconnect();
+    }
+  };
+  
+  // Save game state to backend
+  const saveGameState = async (): Promise<boolean> => {
+    if (!isAuthenticated || !user) return false;
+    
+    try {
+      const currentState = gameStateRef.current;
+      
+      // Prepare the state for saving (only what we need)
+      const saveData = {
+        playerData: currentState.playerData,
+        currentMap: currentState.currentMap,
+        completedChallenges: currentState.completedChallenges,
+        inventory: currentState.inventory,
+        quests: currentState.quests,
+        settings: currentState.settings
       };
-    }
-  }, [isAuthenticated, user]);
-
-  // Initialize the game by fetching player and world data
-  const initializeGame = async () => {
-    try {
-      // In a real implementation, you would fetch data from your API
-      const playerDataResponse = await fetch("/api/game/player");
-      const areasResponse = await fetch("/api/game/areas");
-
-      if (!playerDataResponse.ok || !areasResponse.ok) {
-        throw new Error("Failed to fetch game data");
-      }
-
-      const playerData = await playerDataResponse.json();
-      const areasData = await areasResponse.json();
-
-      dispatch({
-        type: "INITIALIZE_GAME",
-        payload: {
-          player: playerData.data,
-          gameAreas: areasData.data.areas,
-        },
+      
+      await axios.post('/api/game/state/save', saveData);
+      
+      setState(prev => ({
+        ...prev,
+        lastSaved: new Date().toISOString()
+      }));
+      
+      return true;
+    } catch (error) {
+      console.error("Failed to save game state:", error);
+      
+      toast({
+        title: "Save Failed",
+        description: "Could not save your game progress",
+        variant: "destructive"
       });
-
-      // If the player has a current area, fetch it
-      if (playerData.data.currentAreaId) {
-        await changeArea(
-          playerData.data.currentAreaId,
-          playerData.data.position
-        );
-      }
-    } catch (error: any) {
-      console.error("Failed to initialize game:", error);
-      dispatch({ type: "SET_ERROR", payload: error.message });
+      
+      return false;
     }
   };
-
-  // Move the player
-  const movePlayer = (
-    x: number,
-    y: number,
-    direction?: string,
-    isMoving?: boolean
-  ) => {
-    // Update local state immediately for responsive UI
-    dispatch({
-      type: "UPDATE_PLAYER_POSITION",
-      payload: {
-        position: { x, y },
-        direction,
-        isMoving,
-      },
+  
+  // Update player position
+  const updatePlayerPosition = (position: GamePosition) => {
+    setState(prev => ({
+      ...prev,
+      playerData: prev.playerData ? {
+        ...prev.playerData,
+        position
+      } : null
+    }));
+    
+    // Emit position update to socket server
+    if (socket.current && user && state.isPlaying && !state.isPaused) {
+      socket.current.emit('playerPosition', {
+        userId: user.id,
+        position,
+        map: state.currentMap
+      });
+    }
+  };
+  
+  // Set current map
+  const setCurrentMap = (mapKey: string) => {
+    setState(prev => ({
+      ...prev,
+      currentMap: mapKey,
+      currentArea: null // Reset area when map changes
+    }));
+    
+    // Emit map change to socket server
+    if (socket.current && user) {
+      socket.current.emit('playerMapChange', {
+        userId: user.id,
+        map: mapKey
+      });
+    }
+  };
+  
+  // Enter an area
+  const enterArea = (area: MapArea) => {
+    setState(prev => ({
+      ...prev,
+      currentArea: area
+    }));
+    
+    // Add area entry event to socket
+    if (socket.current && user) {
+      socket.current.emit('playerEnterArea', {
+        userId: user.id,
+        areaName: area.name,
+        map: state.currentMap
+      });
+    }
+    
+    // Trigger notification
+    addNotification({
+      type: 'system',
+      title: 'Area Discovered',
+      message: `You have entered ${area.name}`
     });
-
-    // Send position update to server if connected
-    if (socket && state.status.isConnected) {
-      socket.emit("player:move", {
-        position: { x, y },
-        animation: direction ? `walk-${direction}` : undefined,
+  };
+  
+  // Leave the current area
+  const leaveArea = () => {
+    // Capture current area before clearing it
+    const previousArea = state.currentArea;
+    
+    setState(prev => ({
+      ...prev,
+      currentArea: null
+    }));
+    
+    // Add area exit event to socket
+    if (socket.current && user && previousArea) {
+      socket.current.emit('playerExitArea', {
+        userId: user.id,
+        areaName: previousArea.name,
+        map: state.currentMap
       });
     }
   };
-
-  // Change the current area
-  const changeArea = async (
-    areaId: string,
-    position?: { x: number; y: number }
-  ) => {
-    try {
-      // Fetch area data
-      const response = await fetch(`/api/game/areas/${areaId}`);
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch area data");
-      }
-
-      const data = await response.json();
-
-      // Update state with new area
-      dispatch({
-        type: "CHANGE_AREA",
-        payload: {
-          areaId,
-          position,
-          areaData: data.data.area,
-        },
+  
+  // Start a challenge
+  const startChallenge = (challenge: GameChallengeDefinition) => {
+    setState(prev => ({
+      ...prev,
+      activeChallenges: [...prev.activeChallenges, challenge]
+    }));
+    
+    // Emit challenge start event
+    if (socket.current && user) {
+      socket.current.emit('playerStartChallenge', {
+        userId: user.id,
+        challengeId: challenge.id
       });
-
-      // Notify server about area change
-      if (socket && state.status.isConnected) {
-        socket.emit("player:changeArea", {
-          areaId,
-          position,
+    }
+  };
+  
+  // Complete a challenge
+  const completeChallenge = async (challengeId: string, data?: any) => {
+    try {
+      // Send completion to backend
+      const response = await axios.post('/api/game/challenge/complete', {
+        challengeId,
+        data
+      });
+      
+      const { xpReward, coinReward } = response.data;
+      
+      // Update state
+      setState(prev => ({
+        ...prev,
+        activeChallenges: prev.activeChallenges.filter(c => c.id !== challengeId),
+        completedChallenges: [...prev.completedChallenges, challengeId],
+        playerData: prev.playerData ? {
+          ...prev.playerData,
+          stats: {
+            ...prev.playerData.stats,
+            experience: (prev.playerData.stats.experience || 0) + xpReward
+          }
+        } : null
+      }));
+      
+      // Emit challenge complete event
+      if (socket.current && user) {
+        socket.current.emit('playerCompleteChallenge', {
+          userId: user.id,
+          challengeId
         });
       }
-    } catch (error: any) {
-      console.error("Failed to change area:", error);
-      dispatch({ type: "SET_ERROR", payload: error.message });
-    }
-  };
-
-  // Start a challenge
-  const startChallenge = (challenge: Challenge) => {
-    dispatch({ type: "START_CHALLENGE", payload: challenge });
-
-    // Notify server about starting a challenge
-    if (socket && state.status.isConnected) {
-      socket.emit("challenge:start", { challengeId: challenge.id });
-    }
-  };
-
-  // End a challenge
-  const endChallenge = (results?: any) => {
-    const challengeId = state.currentChallenge?.id;
-
-    dispatch({ type: "END_CHALLENGE" });
-
-    // Notify server about challenge completion if there are results
-    if (results && socket && state.status.isConnected && challengeId) {
-      socket.emit("challenge:complete", {
-        challengeId,
-        score: results.score,
-        timeTaken: results.timeTaken,
+      
+      // Show completion notification
+      toast({
+        title: "Challenge Completed!",
+        description: `You earned ${xpReward} XP and ${coinReward} coins`,
+        variant: "success"
+      });
+      
+      // Add to notifications
+      addNotification({
+        type: 'achievement',
+        title: 'Challenge Completed',
+        message: `You completed a challenge and earned ${xpReward} XP!`
+      });
+      
+    } catch (error) {
+      console.error("Failed to complete challenge:", error);
+      
+      toast({
+        title: "Challenge Completion Failed",
+        description: "There was an error recording your progress",
+        variant: "destructive"
       });
     }
   };
-
-  // Add an item to inventory
-  const addItemToInventory = (item: any) => {
-    dispatch({ type: "ADD_ITEM_TO_INVENTORY", payload: item });
+  
+  // Interact with NPC
+  const interactWithNPC = (npc: NPCDefinition | null) => {
+    setState(prev => ({
+      ...prev,
+      interactingWith: npc
+    }));
+    
+    // Emit NPC interaction event
+    if (socket.current && user && npc) {
+      socket.current.emit('playerInteractNPC', {
+        userId: user.id,
+        npcId: npc.id
+      });
+    }
   };
-
-  // Remove an item from inventory
-  const removeItemFromInventory = (itemId: string) => {
-    dispatch({ type: "REMOVE_ITEM_FROM_INVENTORY", payload: { id: itemId } });
+  
+  // Add item to inventory
+  const addItem = (item: any) => {
+    setState(prev => ({
+      ...prev,
+      inventory: [...prev.inventory, item]
+    }));
+    
+    // Add notification
+    addNotification({
+      type: 'item',
+      title: 'Item Acquired',
+      message: `You obtained ${item.name}`
+    });
   };
-
-  // Update player stats
-  const updatePlayerStats = (stats: Partial<GameState["player"]["stats"]>) => {
-    dispatch({ type: "UPDATE_PLAYER_STATS", payload: stats });
+  
+  // Remove item from inventory
+  const removeItem = (itemId: string) => {
+    setState(prev => ({
+      ...prev,
+      inventory: prev.inventory.filter(i => i.id !== itemId)
+    }));
   };
-
+  
   // Update game settings
-  const updateGameSettings = (settings: Partial<GameState["settings"]>) => {
-    dispatch({ type: "UPDATE_GAME_SETTINGS", payload: settings });
-
-    // Save settings to localStorage
-    localStorage.setItem(
-      "gameSettings",
-      JSON.stringify({
-        ...state.settings,
-        ...settings,
-      })
-    );
-  };
-
-  // Send a chat message
-  const sendChatMessage = (message: string, isGlobal = false) => {
-    if (socket && state.status.isConnected) {
-      if (isGlobal) {
-        socket.emit("chat:global", { message });
-      } else {
-        socket.emit("chat:area", { message });
+  const updateSettings = (settings: Partial<GameState['settings']>) => {
+    setState(prev => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        ...settings
       }
-    }
+    }));
+    
+    // Save settings update
+    saveGameState();
   };
-
-  // Interact with an NPC
-  const interactWithNPC = (npcId: string) => {
-    if (socket && state.status.isConnected) {
-      socket.emit("npc:interact", { npcId });
-    }
+  
+  // Mark notification as read
+  const markNotificationAsRead = (notificationId: string) => {
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.map(notification => 
+        notification.id === notificationId 
+          ? { ...notification, read: true } 
+          : notification
+      )
+    }));
   };
-
-  // Context value with all game state and actions
-  const contextValue: GameContextType = {
+  
+  // Clear all notifications
+  const clearAllNotifications = () => {
+    setState(prev => ({
+      ...prev,
+      notifications: []
+    }));
+  };
+  
+  // Add a new notification
+  const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
+    const newNotification: Notification = {
+      ...notification,
+      id: Math.random().toString(36).substring(2, 11),
+      timestamp: Date.now(),
+      read: false
+    };
+    
+    setState(prev => ({
+      ...prev,
+      notifications: [newNotification, ...prev.notifications].slice(0, 50) // Keep last 50 notifications
+    }));
+  };
+  
+  // Reset game state
+  const resetGameState = () => {
+    // Clear auto-save interval
+    if (autoSaveIntervalRef.current) {
+      clearInterval(autoSaveIntervalRef.current);
+      autoSaveIntervalRef.current = null;
+    }
+    
+    setState(defaultGameState);
+  };
+  
+  // Setup socket listeners
+  const setupSocketListeners = () => {
+    if (!socket.current) return;
+    
+    // Player joined
+    socket.current.on('playerJoined', (data: any) => {
+      // Don't add self
+      if (data.userId === user?.id) return;
+      
+      // Only add players in same map
+      if (data.map !== gameStateRef.current.currentMap) return;
+      
+      setState(prev => ({
+        ...prev,
+        players: {
+          ...prev.players,
+          [data.userId]: {
+            id: data.userId,
+            username: data.username,
+            position: data.position || { x: 0, y: 0 },
+            sprite: data.sprite || 'player',
+            lastUpdated: Date.now()
+          }
+        }
+      }));
+    });
+    
+    // Player left
+    socket.current.on('playerLeft', (data: any) => {
+      setState(prev => {
+        const newPlayers = { ...prev.players };
+        delete newPlayers[data.userId];
+        return {
+          ...prev,
+          players: newPlayers
+        };
+      });
+    });
+    
+    // Player position update
+    socket.current.on('playerPosition', (data: any) => {
+      // Don't update self
+      if (data.userId === user?.id) return;
+      
+      // Only update players in same map
+      if (data.map !== gameStateRef.current.currentMap) return;
+      
+      setState(prev => ({
+        ...prev,
+        players: {
+          ...prev.players,
+          [data.userId]: {
+            ...prev.players[data.userId],
+            position: data.position,
+            lastUpdated: Date.now()
+          }
+        }
+      }));
+    });
+    
+    // Player map change
+    socket.current.on('playerMapChange', (data: any) => {
+      setState(prev => {
+        // If player left our current map, remove them
+        if (data.map !== prev.currentMap) {
+          const newPlayers = { ...prev.players };
+          delete newPlayers[data.userId];
+          return {
+            ...prev,
+            players: newPlayers
+          };
+        }
+        
+        // If player entered our map, add them
+        if (data.map === prev.currentMap && data.userId !== user?.id) {
+          return {
+            ...prev,
+            players: {
+              ...prev.players,
+              [data.userId]: {
+                id: data.userId,
+                username: data.username,
+                position: data.position || { x: 0, y: 0 },
+                sprite: data.sprite || 'player',
+                lastUpdated: Date.now()
+              }
+            }
+          };
+        }
+        
+        return prev;
+      });
+    });
+    
+    // Global game events (achievements, announcements)
+    socket.current.on('gameEvent', (data: any) => {
+      addNotification({
+        type: data.type || 'system',
+        title: data.title || 'Game Event',
+        message: data.message || ''
+      });
+    });
+  };
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current);
+      }
+      
+      if (socket.current) {
+        disconnectSocket();
+        socket.current = null;
+      }
+    };
+  }, []);
+  
+  // Initialize game when user authenticates
+  useEffect(() => {
+    if (isAuthenticated && user && !state.isInitialized && !state.isLoading) {
+      initGame();
+    }
+  }, [isAuthenticated, user]);
+  
+  // Context value
+  const value = {
     state,
-    dispatch,
-    movePlayer,
-    changeArea,
+    initGame,
+    startGame,
+    pauseGame,
+    resumeGame,
+    exitGame,
+    saveGameState,
+    updatePlayerPosition,
+    setCurrentMap,
+    enterArea,
+    leaveArea,
     startChallenge,
-    endChallenge,
-    addItemToInventory,
-    removeItemFromInventory,
-    updatePlayerStats,
-    updateGameSettings,
-    sendChatMessage,
+    completeChallenge,
     interactWithNPC,
+    addItem,
+    removeItem,
+    updateSettings,
+    markNotificationAsRead,
+    clearAllNotifications,
+    addNotification,
+    resetGameState,
   };
-
+  
   return (
-    <GameContext.Provider value={contextValue}>{children}</GameContext.Provider>
+    <GameContext.Provider value={value}>
+      {children}
+    </GameContext.Provider>
   );
 };
-
-// Hook for accessing the game context
-export const useGameContext = () => useContext(GameContext);
-
-export default GameContext;
