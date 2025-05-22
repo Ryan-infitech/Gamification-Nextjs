@@ -1,1058 +1,1234 @@
-import Phaser from "phaser";
-import { GameScene, TiledMapObject } from "@/types/phaser";
-import { PLAYER_SPEED, TILE_SIZE } from "../config";
+import Phaser from 'phaser';
+import { SceneType, GameConfig, GameControls, PlayerData, GamePosition } from '@/types/phaser';
 
-export default class TutorialArea extends Phaser.Scene implements GameScene {
-  // Scene properties
+/**
+ * Tutorial scene untuk memperkenalkan pemain ke game
+ */
+export default class TutorialAreaScene extends Phaser.Scene {
+  // Configuration and data
+  private gameConfig!: GameConfig;
+  private playerData!: PlayerData;
+  
+  // Map elements
   private map!: Phaser.Tilemaps.Tilemap;
-  private player!: Phaser.Physics.Arcade.Sprite & {
-    direction: "up" | "down" | "left" | "right";
-    speed: number;
-    updateMovement: (cursors: Phaser.Types.Input.Keyboard.CursorKeys) => void;
-  };
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private tutorialTriggers: Phaser.Physics.Arcade.Group | null = null;
-  private tutorialSteps: { [key: string]: boolean } = {};
-  private tutorialTexts: Phaser.GameObjects.Text[] = [];
-  private exitZone!: Phaser.Physics.Arcade.Sprite;
-  private interactionTarget: any = null;
-  private interactionActive: boolean = false;
-  private lastPosition: { x: number; y: number } = { x: 0, y: 0 };
-  private progressBar!: Phaser.GameObjects.Rectangle;
-  private progressText!: Phaser.GameObjects.Text;
-
-  // Tutorial state
-  private currentStep: number = 0;
-  private totalSteps: number = 5;
+  private tileset!: Phaser.Tilemaps.Tileset;
+  private groundLayer!: Phaser.Tilemaps.TilemapLayer;
+  private obstaclesLayer!: Phaser.Tilemaps.TilemapLayer;
+  private decorationLayer!: Phaser.Tilemaps.TilemapLayer;
+  
+  // Character and player
+  private player!: Phaser.Physics.Arcade.Sprite;
+  private tutor!: Phaser.Physics.Arcade.Sprite;
+  
+  // Movement and controls
+  private controls!: GameControls;
+  private playerVelocity: number = 100; // Slower for tutorial
+  private playerIsMoving: boolean = false;
+  private currentPlayerDirection: 'up' | 'down' | 'left' | 'right' = 'down';
+  
+  // Tutorial specific
+  private tutorialStep: number = 0;
   private tutorialComplete: boolean = false;
-
+  private tutorialTexts: Phaser.GameObjects.Text[] = [];
+  private helpBubble!: Phaser.GameObjects.Container;
+  private dialogActive: boolean = false;
+  
+  // Audio
+  private backgroundMusic!: Phaser.Sound.BaseSound;
+  private walkSound!: Phaser.Sound.BaseSound;
+  private interactSound!: Phaser.Sound.BaseSound;
+  
+  // Dialog steps for tutorial
+  private tutorialSteps = [
+    {
+      text: "Welcome to the Computer Science Adventure! I'm Professor Pixel, your guide.",
+      position: { x: 240, y: 240 }
+    },
+    {
+      text: "Let's learn the basics. Use W,A,S,D or arrow keys to move around.",
+      position: { x: 240, y: 240 },
+      task: 'move'
+    },
+    {
+      text: "Great job! Now press E to interact with objects and NPCs like me.",
+      position: { x: 240, y: 240 },
+      task: 'interact'
+    },
+    {
+      text: "Excellent! Throughout your journey, you'll encounter coding challenges.",
+      position: { x: 240, y: 240 }
+    },
+    {
+      text: "Let's try a simple one! Head to the glowing terminal ahead.",
+      position: { x: 350, y: 200 },
+      task: 'gotoChallenge'
+    },
+    {
+      text: "This is a basic 'Hello World' challenge. Press E to start.",
+      position: { x: 350, y: 200 },
+      task: 'startChallenge'
+    },
+    {
+      text: "Congratulations! You've completed the tutorial. Let's head to the main world!",
+      position: { x: 240, y: 240 },
+      task: 'finishTutorial'
+    }
+  ];
+  
   constructor() {
-    super({ key: "TutorialArea" });
+    super({
+      key: SceneType.TUTORIAL
+    });
   }
 
-  init(data: any): void {
-    // Get specific spawn data
-    if (data && data.spawnPosition) {
-      this.lastPosition = data.spawnPosition;
-    }
-
-    // Reset tutorial progress if coming from world map
-    if (data.coming_from === "WorldMap") {
-      this.tutorialSteps = {};
-      this.currentStep = 0;
-      this.tutorialComplete = false;
-    }
-
-    // Initialize interaction state
-    this.interactionActive = false;
-    this.interactionTarget = null;
-  }
-
-  create(): void {
-    // Create the tutorial map
-    this.createMap();
-
-    // Create the player
-    this.createPlayer();
-
-    // Set up tutorial triggers and zones
-    this.createTutorialTriggers();
-
-    // Set up UI elements
-    this.createUI();
-
-    // Set up camera to follow player
-    this.cameras.main.startFollow(this.player, true);
-    this.cameras.main.setZoom(2); // Adjust zoom for pixel art clarity
-
-    // Set up controls
-    this.cursors = this.input.keyboard!.createCursorKeys();
-
-    // Set up collisions
-    this.createCollisions();
-
-    // Show welcome message
-    this.showTutorialStep("welcome");
-
-    // Set up input for interaction
-    this.input.keyboard!.on("keydown-E", this.handleInteraction, this);
-
-    // Ambient background effects
-    this.createAmbientEffects();
-  }
-
-  update(time: number, delta: number): void {
-    // Update player movement
-    if (this.player && this.cursors) {
-      this.player.updateMovement(this.cursors);
-    }
-
-    // Check for interaction zones
-    this.updateInteractionPrompts();
-
-    // Check if tutorial is complete and player is at exit
-    if (
-      this.tutorialComplete &&
-      this.exitZone &&
-      Phaser.Geom.Rectangle.Overlaps(
-        this.exitZone.getBounds(),
-        this.player.getBounds()
-      )
-    ) {
-      this.handleExit();
-    }
-  }
-
-  private createMap(): void {
-    // Create the tilemap from the tutorial map JSON
-    this.map = this.make.tilemap({ key: "tutorial-map" });
-
-    // Add tilesets
-    const tileset1 = this.map.addTilesetImage(
-      "pixel-cyberpunk-interior",
-      "pixel-cyberpunk-interior"
-    );
-    const tileset2 = this.map.addTilesetImage(
-      "robot-warfare-tiles",
-      "robot-warfare-tiles"
-    );
-
-    if (!tileset1 || !tileset2) {
-      console.error("Failed to load tilesets for tutorial map");
-      return;
-    }
-
-    const tilesets = [tileset1, tileset2];
-
-    // Create layers
-    if (this.map.layers) {
-      for (let i = 0; i < this.map.layers.length; i++) {
-        const layerData = this.map.layers[i];
-        if (layerData.type === "tilelayer") {
-          const layer = this.map.createLayer(layerData.name, tilesets, 0, 0);
-          if (layer) {
-            // Set depth based on layer order
-            layer.setDepth(i * 10);
-
-            // Set collision for appropriate layers
-            if (
-              layerData.name === "Collision" ||
-              layerData.name.includes("Walls")
-            ) {
-              layer.setCollisionByProperty({ collides: true });
-            }
-          }
-        }
-      }
-    }
-
-    // Set world bounds based on map dimensions
-    this.physics.world.setBounds(
-      0,
-      0,
-      this.map.widthInPixels,
-      this.map.heightInPixels
-    );
-  }
-
-  private createPlayer(): void {
-    // Find spawn point
-    let spawnX = this.lastPosition?.x || 100;
-    let spawnY = this.lastPosition?.y || 100;
-
-    // If we have a spawn point object layer, use it
-    const spawnLayer = this.map.getObjectLayer("Spawn");
-    if (spawnLayer && spawnLayer.objects && spawnLayer.objects.length > 0) {
-      const spawnPoint = spawnLayer.objects[0];
-      spawnX = spawnPoint.x || spawnX;
-      spawnY = spawnPoint.y || spawnY;
-    }
-
-    // Create the player sprite with physics
-    this.player = this.physics.add.sprite(spawnX, spawnY, "player", 0) as any;
-    this.player.setOrigin(0.5, 0.5);
-    this.player.setCollideWorldBounds(true);
-
-    // Add custom properties to player
-    this.player.direction = "down";
-    this.player.speed = PLAYER_SPEED;
-
-    // Player update movement method (same as in WorldMap)
-    this.player.updateMovement = (cursors) => {
-      // Reset velocity
-      this.player.setVelocity(0);
-
-      // Diagonal movement
-      let movingX = false;
-      let movingY = false;
-
-      // Horizontal movement
-      if (cursors.left.isDown) {
-        this.player.setVelocityX(-this.player.speed);
-        this.player.direction = "left";
-        movingX = true;
-      } else if (cursors.right.isDown) {
-        this.player.setVelocityX(this.player.speed);
-        this.player.direction = "right";
-        movingX = true;
-      }
-
-      // Vertical movement
-      if (cursors.up.isDown) {
-        this.player.setVelocityY(-this.player.speed);
-        if (!movingX) this.player.direction = "up";
-        movingY = true;
-      } else if (cursors.down.isDown) {
-        this.player.setVelocityY(this.player.speed);
-        if (!movingX) this.player.direction = "down";
-        movingY = true;
-      }
-
-      // Normalize diagonal movement speed
-      if (movingX && movingY) {
-        const normalizedSpeed = this.player.speed / Math.sqrt(2);
-        this.player.setVelocity(
-          this.player.body.velocity.x > 0 ? normalizedSpeed : -normalizedSpeed,
-          this.player.body.velocity.y > 0 ? normalizedSpeed : -normalizedSpeed
-        );
-      }
-
-      // Update animation based on movement
-      if (movingX || movingY) {
-        this.player.anims.play(`walk-${this.player.direction}`, true);
-
-        // If this is the first movement, trigger the movement tutorial
-        if (!this.tutorialSteps["movement"]) {
-          this.tutorialSteps["movement"] = true;
-          this.showTutorialStep("movement");
-        }
-      } else {
-        // Idle animation based on last direction
-        if (["up", "down"].includes(this.player.direction)) {
-          this.player.anims.play(`idle-${this.player.direction}`, true);
-        } else {
-          // Use specific frame for idle left/right
-          this.player.anims.stop();
-          this.player.setFrame(this.player.direction === "left" ? 16 : 20);
-        }
+  /**
+   * Initialize scene data
+   */
+  init(): void {
+    this.gameConfig = this.game.config as GameConfig;
+    
+    // Get player data from registry or create default
+    this.playerData = this.registry.get('playerData') || {
+      position: { x: 240, y: 240 },
+      sprite: 'player',
+      stats: {
+        level: 1,
+        experience: 0,
+        health: 100,
+        strength: 10,
+        intelligence: 10,
+        agility: 10
       }
     };
+    
+    // Check if tutorial was already completed from localStorage
+    const completedTutorial = localStorage.getItem('completedTutorial');
+    this.tutorialComplete = !!completedTutorial;
+    
+    // Reset tutorial state
+    this.tutorialStep = 0;
+    this.tutorialTexts = [];
+    this.dialogActive = false;
   }
 
-  private createTutorialTriggers(): void {
-    // Create a physics group for tutorial trigger zones
-    this.tutorialTriggers = this.physics.add.group();
+  /**
+   * Create tutorial scene
+   */
+  create(): void {
+    // If tutorial already completed, skip to world map
+    if (this.tutorialComplete) {
+      this.skipToWorldMap();
+      return;
+    }
+    
+    // Setup map
+    this.createMap();
+    
+    // Setup player
+    this.createPlayer();
+    
+    // Setup tutor character
+    this.createTutor();
+    
+    // Setup camera
+    this.setupCamera();
+    
+    // Setup controls
+    this.setupControls();
+    
+    // Setup collisions
+    this.setupCollisions();
+    
+    // Setup audio
+    this.setupAudio();
+    
+    // Setup tutorial elements
+    this.setupTutorial();
+    
+    // Add challenges
+    this.createChallenges();
+    
+    // Create dialog bubble
+    this.createDialogBubble();
+    
+    // Start the tutorial
+    this.startTutorialStep();
+    
+    // Fade in
+    this.cameras.main.fadeIn(1000);
+  }
 
-    // Get tutorial zones from Tiled map
-    const tutorialLayer = this.map.getObjectLayer("TutorialTriggers");
-    if (tutorialLayer && tutorialLayer.objects) {
-      tutorialLayer.objects.forEach((obj) => {
-        // Create invisible sprite as trigger zone
-        const zone = this.physics.add.sprite(obj.x!, obj.y!, "pixel");
-        zone.setAlpha(0.1); // Almost invisible, but can be seen in dev
-        zone.setDisplaySize(obj.width || 32, obj.height || 32);
+  /**
+   * Create the tilemap from Tiled JSON
+   */
+  private createMap(): void {
+    // Create tilemap from JSON
+    this.map = this.make.tilemap({ key: 'tutorial-area' });
+    
+    // Add tileset image
+    this.tileset = this.map.addTilesetImage('main-tileset', 'main-tileset') as Phaser.Tilemaps.Tileset;
+    
+    // Create layers
+    this.groundLayer = this.map.createLayer('ground', this.tileset, 0, 0) as Phaser.Tilemaps.TilemapLayer;
+    this.decorationLayer = this.map.createLayer('decoration', this.tileset, 0, 0) as Phaser.Tilemaps.TilemapLayer;
+    this.obstaclesLayer = this.map.createLayer('obstacles', this.tileset, 0, 0) as Phaser.Tilemaps.TilemapLayer;
+    
+    // Set collision properties
+    this.obstaclesLayer.setCollisionByProperty({ collides: true });
+  }
 
-        // Set tutorial step data
-        zone.setData("type", "tutorial");
-        zone.setData("step", obj.name || "unknown");
+  /**
+   * Create player character
+   */
+  private createPlayer(): void {
+    // Create player sprite at start position
+    this.player = this.physics.add.sprite(
+      this.playerData.position.x,
+      this.playerData.position.y,
+      'player',
+      0
+    );
+    
+    // Enable physics for the player
+    this.player.setCollideWorldBounds(true);
+    this.player.setSize(24, 16); // Smaller collision box than sprite
+    this.player.setOffset(4, 16); // Offset collision box to fit character
+    
+    // Set z-index for proper overlap rendering
+    this.player.setDepth(1);
+    
+    // Create animations for player
+    this.createPlayerAnimations();
+    
+    // Start with idle animation
+    this.player.anims.play('idle-down');
+  }
 
-        // Add to tutorial triggers group
-        this.tutorialTriggers.add(zone);
-
-        // If this is the exit zone, save a reference
-        if (obj.name === "exit") {
-          this.exitZone = zone;
-
-          // Add visual indicator for exit
-          const indicator = this.add.sprite(obj.x!, obj.y! - 20, "ui", "exit");
-          indicator.setScale(0.5);
-          indicator.setVisible(false);
-          zone.setData("indicator", indicator);
-        }
+  /**
+   * Create player animations
+   */
+  private createPlayerAnimations(): void {
+    // Only create animations if they don't exist yet
+    if (!this.anims.exists('idle-down')) {
+      // Idle animations
+      this.anims.create({
+        key: 'idle-down',
+        frames: this.anims.generateFrameNumbers('player', { start: 0, end: 3 }),
+        frameRate: 5,
+        repeat: -1
+      });
+      
+      this.anims.create({
+        key: 'idle-up',
+        frames: this.anims.generateFrameNumbers('player', { start: 4, end: 7 }),
+        frameRate: 5,
+        repeat: -1
+      });
+      
+      this.anims.create({
+        key: 'idle-left',
+        frames: this.anims.generateFrameNumbers('player', { start: 8, end: 11 }),
+        frameRate: 5,
+        repeat: -1
+      });
+      
+      this.anims.create({
+        key: 'idle-right',
+        frames: this.anims.generateFrameNumbers('player', { start: 12, end: 15 }),
+        frameRate: 5,
+        repeat: -1
+      });
+      
+      // Walking animations
+      this.anims.create({
+        key: 'walk-down',
+        frames: this.anims.generateFrameNumbers('player', { start: 16, end: 23 }),
+        frameRate: 10,
+        repeat: -1
+      });
+      
+      this.anims.create({
+        key: 'walk-up',
+        frames: this.anims.generateFrameNumbers('player', { start: 24, end: 31 }),
+        frameRate: 10,
+        repeat: -1
+      });
+      
+      this.anims.create({
+        key: 'walk-left',
+        frames: this.anims.generateFrameNumbers('player', { start: 32, end: 39 }),
+        frameRate: 10,
+        repeat: -1
+      });
+      
+      this.anims.create({
+        key: 'walk-right',
+        frames: this.anims.generateFrameNumbers('player', { start: 40, end: 47 }),
+        frameRate: 10,
+        repeat: -1
       });
     }
-
-    // Create interactable objects for the tutorial
-    this.createTutorialObjects();
   }
 
-  private createTutorialObjects(): void {
-    // Get objects from Tiled map
-    const objectsLayer = this.map.getObjectLayer("Interactables");
-    if (!objectsLayer || !objectsLayer.objects) return;
+  /**
+   * Create tutor character (professor)
+   */
+  private createTutor(): void {
+    // Create tutor at fixed position
+    this.tutor = this.physics.add.sprite(
+      240,
+      180,
+      'npcs',
+      0
+    );
+    
+    // Enable physics
+    this.tutor.setImmovable(true);
+    
+    // Create tutor idle animation
+    if (!this.anims.exists('tutor-idle')) {
+      this.anims.create({
+        key: 'tutor-idle',
+        frames: this.anims.generateFrameNumbers('npcs', { start: 0, end: 3 }),
+        frameRate: 5,
+        repeat: -1
+      });
+    }
+    
+    // Play idle animation
+    this.tutor.anims.play('tutor-idle');
+    
+    // Add exclamation mark indicator
+    const indicator = this.add.sprite(
+      this.tutor.x,
+      this.tutor.y - 30,
+      'ui-icons',
+      5
+    );
+    
+    // Add floating animation to indicator
+    this.tweens.add({
+      targets: indicator,
+      y: indicator.y - 5,
+      duration: 1200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+    
+    // Store indicator reference
+    this.tutor.setData('indicator', indicator);
+  }
 
-    objectsLayer.objects.forEach((obj) => {
-      if (obj.type === "terminal") {
-        // Create terminal sprite
-        const terminal = this.physics.add.sprite(
-          obj.x!,
-          obj.y!,
-          "tutorial-objects",
-          "terminal"
-        );
-        terminal.setData("type", "terminal");
-        terminal.setData("step", obj.name || "terminal");
+  /**
+   * Setup camera to follow player
+   */
+  private setupCamera(): void {
+    // Configure main camera
+    this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
+    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+    this.cameras.main.setZoom(1.2); // Closer zoom for tutorial
+    
+    // Set world bounds
+    this.physics.world.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
+  }
 
-        // Add indicator for interaction
-        const indicator = this.add.sprite(
-          obj.x!,
-          obj.y! - 20,
-          "ui",
-          "terminal"
-        );
-        indicator.setScale(0.5);
-        indicator.setVisible(false);
-        terminal.setData("indicator", indicator);
+  /**
+   * Setup keyboard controls
+   */
+  private setupControls(): void {
+    // Get keyboard inputs
+    this.controls = {
+      up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+      down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
+      left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+      right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
+      interact: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
+      menu: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC)
+    };
+    
+    // Arrow keys also work
+    this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP).on('down', () => {
+      this.controls.up.isDown = true;
+    });
+    this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN).on('down', () => {
+      this.controls.down.isDown = true;
+    });
+    this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT).on('down', () => {
+      this.controls.left.isDown = true;
+    });
+    this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT).on('down', () => {
+      this.controls.right.isDown = true;
+    });
+    
+    // Add interact handler
+    this.controls.interact.on('down', () => this.handleInteract());
+    
+    // Add skip tutorial option
+    this.controls.menu.on('down', () => this.showSkipTutorialPrompt());
+  }
 
-        // Add to tutorial triggers for overlap detection
-        this.tutorialTriggers?.add(terminal);
-      } else if (obj.type === "challenge") {
-        // Create challenge pod/station
-        const pod = this.physics.add.sprite(
-          obj.x!,
-          obj.y!,
-          "tutorial-objects",
-          "pod"
-        );
-        pod.setData("type", "challenge");
-        pod.setData("step", obj.name || "challenge");
-        pod.setData(
-          "challengeId",
-          obj.properties?.find((p) => p.name === "challengeId")?.value
-        );
+  /**
+   * Setup collisions between objects
+   */
+  private setupCollisions(): void {
+    // Player collides with obstacles
+    this.physics.add.collider(this.player, this.obstaclesLayer);
+    
+    // Player collides with tutor
+    this.physics.add.collider(this.player, this.tutor);
+  }
 
-        // Add indicator for interaction
-        const indicator = this.add.sprite(
-          obj.x!,
-          obj.y! - 20,
-          "ui",
-          "challenge"
-        );
-        indicator.setScale(0.5);
-        indicator.setVisible(false);
-        pod.setData("indicator", indicator);
-
-        // Add to tutorial triggers for overlap detection
-        this.tutorialTriggers?.add(pod);
-      }
+  /**
+   * Setup game audio
+   */
+  private setupAudio(): void {
+    // Background music (different, more peaceful for tutorial)
+    this.backgroundMusic = this.sound.add('bg-music', {
+      volume: 0.3,
+      loop: true
+    });
+    
+    // Check if sound is enabled in player preferences
+    const soundEnabled = this.registry.get('soundEnabled');
+    if (soundEnabled !== false) {
+      this.backgroundMusic.play();
+    }
+    
+    // Walking sound
+    this.walkSound = this.sound.add('walk-sound', {
+      volume: 0.2,
+      loop: true,
+      rate: 1.5
+    });
+    
+    // Interaction sound
+    this.interactSound = this.sound.add('interact-sound', {
+      volume: 0.5
     });
   }
 
-  private createUI(): void {
-    // Create progress indicator
-    const progressBg = this.add.rectangle(
-      this.cameras.main.width / 2,
-      20,
-      200,
-      10,
-      0x000000,
-      0.5
+  /**
+   * Setup tutorial elements
+   */
+  private setupTutorial(): void {
+    // Create "Skip Tutorial" button
+    const skipButton = this.add.container(
+      this.cameras.main.width - 80,
+      30
     );
-    progressBg.setScrollFactor(0);
-    progressBg.setDepth(1000);
-
-    this.progressBar = this.add.rectangle(
-      this.cameras.main.width / 2 -
-        100 +
-        ((this.currentStep / this.totalSteps) * 200) / 2,
-      20,
-      (this.currentStep / this.totalSteps) * 200,
-      10,
-      0x00f0ff,
-      1
-    );
-    this.progressBar.setScrollFactor(0);
-    this.progressBar.setDepth(1001);
-    this.progressBar.setOrigin(0, 0.5);
-
-    // Progress text
-    this.progressText = this.add.text(
-      this.cameras.main.width / 2,
-      40,
-      `Tutorial Progress: ${this.currentStep}/${this.totalSteps}`,
+    skipButton.setScrollFactor(0);
+    skipButton.setDepth(100);
+    
+    // Button background
+    const skipBg = this.add.graphics();
+    skipBg.fillStyle(0x000000, 0.6);
+    skipBg.fillRoundedRect(0, 0, 120, 30, 5);
+    skipBg.lineStyle(2, 0xFFFFFF, 0.8);
+    skipBg.strokeRoundedRect(0, 0, 120, 30, 5);
+    
+    // Button text
+    const skipText = this.add.text(
+      60,
+      15,
+      'Skip Tutorial',
       {
-        fontSize: "12px",
-        color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: 'Press Start 2P',
+        fontSize: '8px',
+        color: '#FFFFFF'
       }
     );
-    this.progressText.setScrollFactor(0);
-    this.progressText.setDepth(1000);
-    this.progressText.setOrigin(0.5, 0.5);
-  }
-
-  private createCollisions(): void {
-    // Add collisions between player and world
-    const collisionLayers = this.map.layers
-      .filter(
-        (layer) => layer.name === "Collision" || layer.name.includes("Walls")
-      )
-      .map((layer) => this.map.getLayer(layer.name).tilemapLayer);
-
-    collisionLayers.forEach((layer) => {
-      if (layer) {
-        this.physics.add.collider(this.player, layer);
-      }
+    skipText.setOrigin(0.5);
+    
+    // Add to container
+    skipButton.add([skipBg, skipText]);
+    
+    // Make button interactive
+    skipBg.setInteractive({
+      useHandCursor: true
     });
-
-    // Add overlap with tutorial trigger zones
-    if (this.tutorialTriggers) {
-      this.physics.add.overlap(
-        this.player,
-        this.tutorialTriggers,
-        this.handleTutorialTrigger,
-        undefined,
-        this
-      );
-    }
+    skipBg.on('pointerdown', () => {
+      this.showSkipTutorialPrompt();
+    });
   }
 
-  private handleTutorialTrigger(
-    player: Phaser.Physics.Arcade.Sprite,
-    trigger: Phaser.Physics.Arcade.Sprite
-  ): void {
-    const triggerType = trigger.getData("type");
-    const step = trigger.getData("step");
-
-    // Set the current interaction target
-    this.interactionTarget = trigger;
-
-    // Show interaction indicator if interactive
-    if (["terminal", "challenge"].includes(triggerType)) {
-      const indicator = trigger.getData("indicator");
-      if (indicator && !indicator.visible) {
-        indicator.setVisible(true);
+  /**
+   * Create dialog bubble for tutorial messages
+   */
+  private createDialogBubble(): void {
+    // Create container
+    this.helpBubble = this.add.container(
+      this.cameras.main.width / 2,
+      this.cameras.main.height - 100
+    );
+    this.helpBubble.setScrollFactor(0);
+    this.helpBubble.setDepth(100);
+    this.helpBubble.setAlpha(0);
+    
+    // Background
+    const bubbleBg = this.add.nineslice(
+      0, 0,
+      'dialog-box',
+      0,
+      400, 100,
+      20, 20, 20, 20
+    );
+    
+    // Text
+    const bubbleText = this.add.text(
+      0,
+      0,
+      '',
+      {
+        fontFamily: 'VT323',
+        fontSize: '20px',
+        color: '#FFFFFF',
+        align: 'center',
+        wordWrap: { width: 360 }
       }
-    }
-
-    // For auto-trigger zones (not requiring interaction), trigger immediately
-    if (
-      triggerType === "tutorial" &&
-      step !== "exit" &&
-      !this.tutorialSteps[step]
-    ) {
-      this.tutorialSteps[step] = true;
-      this.showTutorialStep(step);
-    }
-  }
-
-  private handleInteraction(): void {
-    if (!this.interactionActive && this.interactionTarget) {
-      const targetType = this.interactionTarget.getData("type");
-      const step = this.interactionTarget.getData("step");
-
-      if (targetType === "terminal") {
-        // Handle terminal interaction (e.g., show code interface)
-        this.tutorialSteps[step] = true;
-        this.showCodeTutorial(step);
-      } else if (targetType === "challenge") {
-        // Handle challenge interaction
-        const challengeId = this.interactionTarget.getData("challengeId");
-        this.tutorialSteps[step] = true;
-        this.startChallenge(challengeId, step);
+    );
+    bubbleText.setOrigin(0.5);
+    
+    // Continue indicator
+    const continueText = this.add.text(
+      160,
+      35,
+      'Press E to continue',
+      {
+        fontFamily: 'Press Start 2P',
+        fontSize: '8px',
+        color: '#FFFFFF',
       }
+    );
+    continueText.setOrigin(0.5);
+    
+    // Blinking animation
+    this.tweens.add({
+      targets: continueText,
+      alpha: 0.3,
+      duration: 500,
+      yoyo: true,
+      repeat: -1
+    });
+    
+    // Add to container
+    this.helpBubble.add([bubbleBg, bubbleText, continueText]);
+    
+    // Store text reference for easy updating
+    this.helpBubble.setData('textObject', bubbleText);
+    this.helpBubble.setData('continueText', continueText);
+  }
 
-      this.interactionActive = true;
+  /**
+   * Create tutorial challenges
+   */
+  private createChallenges(): void {
+    // Create challenge terminal
+    const terminal = this.physics.add.sprite(
+      350,
+      200,
+      'tileset-items',
+      0
+    );
+    
+    // Add glow effect
+    const glow = this.add.graphics();
+    glow.fillStyle(0x4B7BEC, 0.4);
+    glow.fillCircle(350, 200, 20);
+    
+    // Add pulsing animation
+    this.tweens.add({
+      targets: glow,
+      alpha: 0.2,
+      duration: 1000,
+      yoyo: true,
+      repeat: -1
+    });
+    
+    // Store reference
+    terminal.setData('glow', glow);
+    terminal.setData('type', 'challenge');
+    
+    // Make terminal interactive
+    terminal.setInteractive();
+    
+    // Start floating effect
+    this.tweens.add({
+      targets: terminal,
+      y: terminal.y - 5,
+      duration: 1500,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+  }
 
-      // Reset interaction state after short delay
-      this.time.delayedCall(500, () => {
-        this.interactionActive = false;
-      });
+  /**
+   * Start tutorial step
+   */
+  private startTutorialStep(): void {
+    // Get current step
+    const step = this.tutorialSteps[this.tutorialStep];
+    
+    // If no step, end tutorial
+    if (!step) {
+      this.completeTutorial();
+      return;
+    }
+    
+    // Update professor position if needed
+    if (step.position && this.tutorialStep > 0) {
+      this.moveTutorTo(step.position);
+    }
+    
+    // Show dialog
+    this.showDialog(step.text);
+    
+    // Setup task for this step if needed
+    this.setupStepTask(step);
+  }
+
+  /**
+   * Show dialog bubble with text
+   */
+  private showDialog(text: string): void {
+    // Set dialog text
+    const textObject = this.helpBubble.getData('textObject');
+    textObject.setText(text);
+    
+    // Show dialog bubble
+    this.helpBubble.setAlpha(0);
+    this.tweens.add({
+      targets: this.helpBubble,
+      alpha: 1,
+      y: this.cameras.main.height - 100,
+      duration: 300
+    });
+    
+    // Set dialog as active
+    this.dialogActive = true;
+  }
+
+  /**
+   * Hide dialog bubble
+   */
+  private hideDialog(): void {
+    // Hide dialog bubble
+    this.tweens.add({
+      targets: this.helpBubble,
+      alpha: 0,
+      y: this.cameras.main.height - 80,
+      duration: 300
+    });
+    
+    // Set dialog as inactive
+    this.dialogActive = false;
+  }
+
+  /**
+   * Setup task for current tutorial step
+   */
+  private setupStepTask(step: any): void {
+    // Clear any existing task state
+    this.player.setData('taskCompleted', false);
+    
+    // Setup task based on type
+    switch (step.task) {
+      case 'move':
+        // Will be checked on update() for player movement
+        break;
+        
+      case 'interact':
+        // Will be checked when player presses E near tutor
+        break;
+        
+      case 'gotoChallenge':
+        // Will be checked on update() for player position
+        break;
+        
+      case 'startChallenge':
+        // Will be checked when player presses E near terminal
+        break;
+        
+      case 'finishTutorial':
+        // Will be completed when player presses E to continue
+        break;
     }
   }
 
-  private updateInteractionPrompts(): void {
-    // Reset interaction target
-    this.interactionTarget = null;
-
-    // Check all tutorial triggers
-    if (this.tutorialTriggers) {
-      this.tutorialTriggers
-        .getChildren()
-        .forEach((trigger: Phaser.GameObjects.GameObject) => {
-          const sprite = trigger as Phaser.Physics.Arcade.Sprite;
-          const triggerType = sprite.getData("type");
-
-          // Only check interactive objects
-          if (!["terminal", "challenge"].includes(triggerType)) {
-            return;
-          }
-
-          const indicator = sprite.getData("indicator");
-
-          // Calculate distance to player
+  /**
+   * Check if current step task is completed
+   */
+  private checkStepTaskCompletion(): void {
+    // If no current step or task already completed, skip
+    if (this.tutorialStep >= this.tutorialSteps.length || this.player.getData('taskCompleted')) {
+      return;
+    }
+    
+    // Get current step
+    const step = this.tutorialSteps[this.tutorialStep];
+    
+    // Check completion based on task type
+    switch (step.task) {
+      case 'move':
+        // Check if player has moved
+        if (this.playerIsMoving) {
+          this.completeCurrentTask();
+        }
+        break;
+        
+      case 'gotoChallenge':
+        // Check if player is near the challenge terminal
+        const terminal = this.children.getAll().find(child => child.getData && child.getData('type') === 'challenge');
+        if (terminal) {
           const distance = Phaser.Math.Distance.Between(
             this.player.x,
             this.player.y,
-            sprite.x,
-            sprite.y
+            terminal.x,
+            terminal.y
           );
-
-          // Show/hide interaction indicator based on proximity
+          
           if (distance < 50) {
-            this.interactionTarget = sprite;
-            if (indicator) indicator.setVisible(true);
-          } else {
-            if (indicator) indicator.setVisible(false);
+            this.completeCurrentTask();
           }
-        });
+        }
+        break;
     }
+  }
 
-    // If tutorial is complete, show exit indicator
-    if (this.tutorialComplete && this.exitZone) {
-      const indicator = this.exitZone.getData("indicator");
+  /**
+   * Complete current tutorial task
+   */
+  private completeCurrentTask(): void {
+    // Mark task as completed
+    this.player.setData('taskCompleted', true);
+    
+    // Play success sound
+    this.sound.play('success-sound');
+    
+    // Hide current dialog
+    this.hideDialog();
+    
+    // Move to next step after a short delay
+    this.time.delayedCall(1000, () => {
+      this.tutorialStep++;
+      this.startTutorialStep();
+    });
+  }
 
-      // Calculate if player is near exit
-      const distance = Phaser.Math.Distance.Between(
+  /**
+   * Move tutor to a new position with animation
+   */
+  private moveTutorTo(position: GamePosition): void {
+    // Skip if already at position
+    if (this.tutor.x === position.x && this.tutor.y === position.y) {
+      return;
+    }
+    
+    // Calculate direction
+    const dirX = position.x - this.tutor.x;
+    const dirY = position.y - this.tutor.y;
+    
+    // Determine animation based on direction
+    /*
+    // This would be implemented with proper tutor walking animations
+    if (Math.abs(dirX) > Math.abs(dirY)) {
+      // Horizontal movement
+      this.tutor.anims.play(dirX > 0 ? 'tutor-walk-right' : 'tutor-walk-left', true);
+    } else {
+      // Vertical movement
+      this.tutor.anims.play(dirY > 0 ? 'tutor-walk-down' : 'tutor-walk-up', true);
+    }
+    */
+    
+    // Move tutor
+    this.tweens.add({
+      targets: this.tutor,
+      x: position.x,
+      y: position.y,
+      duration: 1000,
+      ease: 'Power2',
+      onComplete: () => {
+        // Return to idle animation
+        this.tutor.anims.play('tutor-idle');
+      }
+    });
+    
+    // Also move the indicator
+    const indicator = this.tutor.getData('indicator');
+    if (indicator) {
+      this.tweens.add({
+        targets: indicator,
+        x: position.x,
+        y: position.y - 30,
+        duration: 1000,
+        ease: 'Power2'
+      });
+    }
+  }
+
+  /**
+   * Handle E key interaction
+   */
+  private handleInteract(): void {
+    // Play interaction sound
+    this.interactSound.play();
+    
+    // If dialog is active, advance dialog
+    if (this.dialogActive) {
+      this.handleDialogAdvance();
+      return;
+    }
+    
+    // Check for interaction with tutor
+    const distanceToTutor = Phaser.Math.Distance.Between(
+      this.player.x,
+      this.player.y,
+      this.tutor.x,
+      this.tutor.y
+    );
+    
+    if (distanceToTutor < 50) {
+      // Get current step
+      const step = this.tutorialSteps[this.tutorialStep];
+      
+      // Check if this is the interact task
+      if (step && step.task === 'interact') {
+        this.completeCurrentTask();
+      } else {
+        // Otherwise just show current step dialog again
+        this.showDialog(step ? step.text : "Let's continue our adventure!");
+      }
+      
+      return;
+    }
+    
+    // Check for interaction with challenge terminal
+    const terminal = this.children.getAll().find(child => child.getData && child.getData('type') === 'challenge');
+    if (terminal) {
+      const distanceToTerminal = Phaser.Math.Distance.Between(
         this.player.x,
         this.player.y,
-        this.exitZone.x,
-        this.exitZone.y
+        terminal.x,
+        terminal.y
       );
-
-      if (distance < 100) {
-        indicator.setVisible(true);
-
-        if (!indicator.getData("animated")) {
-          indicator.setData("animated", true);
-
-          // Add pulsing animation
-          this.tweens.add({
-            targets: indicator,
-            alpha: { from: 0.7, to: 1 },
-            scale: { from: 0.4, to: 0.5 },
-            duration: 1000,
-            ease: "Sine.easeInOut",
-            yoyo: true,
-            repeat: -1,
-          });
+      
+      if (distanceToTerminal < 50) {
+        // Get current step
+        const step = this.tutorialSteps[this.tutorialStep];
+        
+        // Check if this is the start challenge task
+        if (step && step.task === 'startChallenge') {
+          this.startCodeChallenge();
         }
       }
     }
   }
 
-  private showTutorialStep(step: string): void {
-    // Clear any existing tutorial text
-    this.tutorialTexts.forEach((text) => text.destroy());
-    this.tutorialTexts = [];
-
-    let title = "";
-    let content = "";
-
-    // Set text based on step
-    switch (step) {
-      case "welcome":
-        title = "Welcome to the Tutorial";
-        content =
-          "In this area, you will learn the basics of the game. Use the arrow keys to move your character.";
-        break;
-      case "movement":
-        title = "Movement Basics";
-        content =
-          "Good job! You can move with the arrow keys. Explore the tutorial area to learn more.";
-        break;
-      case "interaction":
-        title = "Interaction";
-        content =
-          "Press E to interact with objects and characters in the world.";
-        break;
-      case "terminal":
-        title = "Coding Terminal";
-        content =
-          "This is a coding terminal. Approach it and press E to interact.";
-        break;
-      case "challenge":
-        title = "Coding Challenges";
-        content =
-          "Coding challenges test your skills. Complete them to earn rewards.";
-        break;
-      case "complete":
-        title = "Tutorial Complete!";
-        content =
-          "You have completed the tutorial. Head to the exit to return to the main world.";
-        this.tutorialComplete = true;
-        // Show exit indicator
-        if (this.exitZone) {
-          const indicator = this.exitZone.getData("indicator");
-          indicator.setVisible(true);
-
-          this.tweens.add({
-            targets: indicator,
-            alpha: { from: 0.7, to: 1 },
-            scale: { from: 0.4, to: 0.5 },
-            duration: 1000,
-            ease: "Sine.easeInOut",
-            yoyo: true,
-            repeat: -1,
-          });
-        }
-        break;
+  /**
+   * Handle dialog advance when pressing E
+   */
+  private handleDialogAdvance(): void {
+    // Get current step
+    const step = this.tutorialSteps[this.tutorialStep];
+    
+    // If this is a task step, don't advance automatically
+    if (step && step.task && step.task !== 'finishTutorial') {
+      // Just hide dialog
+      this.hideDialog();
+      return;
     }
-
-    // Create tutorial message box
-    const messageBg = this.add.rectangle(
-      this.cameras.main.width / 2,
-      this.cameras.main.height - 100,
-      this.cameras.main.width - 40,
-      120,
-      0x000000,
-      0.8
-    );
-    messageBg.setStrokeStyle(2, 0x00f0ff);
-    messageBg.setScrollFactor(0);
-    messageBg.setDepth(1000);
-
-    // Add title text
-    const titleText = this.add.text(
-      messageBg.x - messageBg.width / 2 + 20,
-      messageBg.y - messageBg.height / 2 + 15,
-      title,
-      {
-        fontSize: "18px",
-        color: "#00f0ff",
-        fontFamily: "monospace",
-        fontStyle: "bold",
-      }
-    );
-    titleText.setScrollFactor(0);
-    titleText.setDepth(1001);
-
-    // Add content text
-    const contentText = this.add.text(
-      messageBg.x - messageBg.width / 2 + 20,
-      messageBg.y - messageBg.height / 2 + 45,
-      content,
-      {
-        fontSize: "14px",
-        color: "#ffffff",
-        fontFamily: "monospace",
-        wordWrap: { width: messageBg.width - 40 },
-      }
-    );
-    contentText.setScrollFactor(0);
-    contentText.setDepth(1001);
-
-    // Add continue prompt
-    const continueText = this.add.text(
-      messageBg.x + messageBg.width / 2 - 150,
-      messageBg.y + messageBg.height / 2 - 20,
-      "Press SPACE to continue",
-      {
-        fontSize: "12px",
-        color: "#888888",
-        fontFamily: "monospace",
-      }
-    );
-    continueText.setScrollFactor(0);
-    continueText.setDepth(1001);
-
-    // Store references to clean up later
-    this.tutorialTexts.push(messageBg as any);
-    this.tutorialTexts.push(titleText);
-    this.tutorialTexts.push(contentText);
-    this.tutorialTexts.push(continueText);
-
-    // Add event to close dialog
-    const closeDialog = () => {
-      this.tutorialTexts.forEach((text) => text.destroy());
-      this.tutorialTexts = [];
-      this.input.keyboard!.off("keydown-SPACE", closeDialog);
-
-      // Increment tutorial step
-      this.currentStep++;
-      this.updateProgress();
-
-      // If all steps are complete, show completion
-      if (this.currentStep >= this.totalSteps && !this.tutorialComplete) {
-        this.showTutorialStep("complete");
-      }
-    };
-
-    this.input.keyboard!.once("keydown-SPACE", closeDialog);
+    
+    // If current step is finish tutorial, complete tutorial
+    if (step && step.task === 'finishTutorial') {
+      this.completeTutorial();
+      return;
+    }
+    
+    // Otherwise move to next step
+    this.tutorialStep++;
+    this.hideDialog();
+    
+    // Start next step after a short delay
+    this.time.delayedCall(500, () => {
+      this.startTutorialStep();
+    });
   }
 
-  private showCodeTutorial(terminalType: string): void {
-    // Clear any existing tutorial text
-    this.tutorialTexts.forEach((text) => text.destroy());
-    this.tutorialTexts = [];
-
-    // Create code editor background
-    const editorBg = this.add.rectangle(
-      this.cameras.main.width / 2,
-      this.cameras.main.height / 2,
-      this.cameras.main.width - 100,
-      this.cameras.main.height - 100,
-      0x000000,
-      0.9
-    );
-    editorBg.setStrokeStyle(2, 0x00f0ff);
-    editorBg.setScrollFactor(0);
-    editorBg.setDepth(1000);
-
-    // Add title based on terminal type
-    let title = "Code Terminal";
-    let sampleCode =
-      '// This is a code editor\n// You will use this to solve challenges\n\nfunction helloWorld() {\n  console.log("Hello, Cyber World!");\n}\n\nhelloWorld();';
-
-    if (terminalType === "algorithm") {
-      title = "Algorithm Terminal";
-      sampleCode =
-        "// Algorithm example\n\nfunction bubbleSort(arr) {\n  let len = arr.length;\n  for (let i = 0; i < len; i++) {\n    for (let j = 0; j < len - i - 1; j++) {\n      if (arr[j] > arr[j + 1]) {\n        // Swap elements\n        let temp = arr[j];\n        arr[j] = arr[j + 1];\n        arr[j + 1] = temp;\n      }\n    }\n  }\n  return arr;\n}";
-    } else if (terminalType === "data-structure") {
-      title = "Data Structure Terminal";
-      sampleCode =
-        "// Data Structure example\n\nclass Node {\n  constructor(data) {\n    this.data = data;\n    this.next = null;\n  }\n}\n\nclass LinkedList {\n  constructor() {\n    this.head = null;\n  }\n  \n  append(data) {\n    // Implementation here\n  }\n}";
-    }
-
-    // Add title text
-    const titleText = this.add.text(
-      editorBg.x - editorBg.width / 2 + 20,
-      editorBg.y - editorBg.height / 2 + 15,
-      title,
-      {
-        fontSize: "18px",
-        color: "#00f0ff",
-        fontFamily: "monospace",
-        fontStyle: "bold",
-      }
-    );
-    titleText.setScrollFactor(0);
-    titleText.setDepth(1001);
-
-    // Add code text with syntax highlighting simulation
-    const codeText = this.add.text(
-      editorBg.x - editorBg.width / 2 + 20,
-      editorBg.y - editorBg.height / 2 + 45,
-      sampleCode,
-      {
-        fontSize: "14px",
-        color: "#ffffff",
-        fontFamily: "monospace",
-        wordWrap: { width: editorBg.width - 40 },
-      }
-    );
-
-    // Simple syntax highlighting with different colors
-    const coloredCode = sampleCode
-      .split("\n")
-      .map((line) => {
-        if (line.trim().startsWith("//")) {
-          return `%c${line}`;
-        } else if (line.includes("function") || line.includes("class")) {
-          return `%f${line}`;
-        } else if (line.includes("console.log")) {
-          return `%m${line}`;
+  /**
+   * Start Hello World code challenge
+   */
+  private startCodeChallenge(): void {
+    // Complete current task first
+    this.completeCurrentTask();
+    
+    // In a real implementation, this would launch the code editor
+    // For now, we'll simulate completion after a brief delay
+    this.time.delayedCall(1000, () => {
+      // Show a temporary "challenge completed" message
+      const completedText = this.add.text(
+        this.cameras.main.width / 2,
+        this.cameras.main.height / 2 - 50,
+        'Challenge Completed!',
+        {
+          fontFamily: 'Press Start 2P',
+          fontSize: '20px',
+          color: '#FFFFFF',
+          stroke: '#000000',
+          strokeThickness: 6
         }
-        return line;
-      })
-      .join("\n");
-
-    codeText.setText(coloredCode);
-
-    // Apply "syntax highlighting" by setting different colors
-    const content = codeText.getWrappedText();
-    const colors = {
-      c: "#888888", // comments
-      f: "#ff00ff", // functions/classes
-      m: "#00ffff", // methods
-    };
-
-    let currentY = codeText.y;
-    content.forEach((line) => {
-      let color = "#ffffff";
-
-      if (line.startsWith("%c")) {
-        color = colors.c;
-        line = line.substring(2);
-      } else if (line.startsWith("%f")) {
-        color = colors.f;
-        line = line.substring(2);
-      } else if (line.startsWith("%m")) {
-        color = colors.m;
-        line = line.substring(2);
-      }
-
-      const lineText = this.add.text(codeText.x, currentY, line, {
-        fontSize: "14px",
-        color: color,
-        fontFamily: "monospace",
+      );
+      completedText.setOrigin(0.5);
+      completedText.setScrollFactor(0);
+      completedText.setDepth(200);
+      
+      // Animate it
+      completedText.setAlpha(0);
+      completedText.setScale(0.5);
+      this.tweens.add({
+        targets: completedText,
+        alpha: 1,
+        scale: 1,
+        duration: 500,
+        ease: 'Back.easeOut',
+        onComplete: () => {
+          // Hold, then fade out
+          this.time.delayedCall(2000, () => {
+            this.tweens.add({
+              targets: completedText,
+              alpha: 0,
+              scale: 1.2,
+              duration: 500,
+              ease: 'Back.easeIn',
+              onComplete: () => {
+                completedText.destroy();
+                
+                // Advance to next step
+                this.tutorialStep++;
+                this.startTutorialStep();
+              }
+            });
+          });
+        }
       });
-
-      lineText.setScrollFactor(0);
-      lineText.setDepth(1001);
-      currentY += lineText.height;
-
-      this.tutorialTexts.push(lineText);
-    });
-
-    codeText.setVisible(false); // Hide the original text
-
-    // Add close button
-    const closeButton = this.add.rectangle(
-      editorBg.x + editorBg.width / 2 - 60,
-      editorBg.y - editorBg.height / 2 + 20,
-      100,
-      30,
-      0x333333,
-      1
-    );
-    closeButton.setInteractive({ useHandCursor: true });
-    closeButton.setScrollFactor(0);
-    closeButton.setDepth(1002);
-
-    const closeText = this.add.text(
-      closeButton.x,
-      closeButton.y,
-      "CLOSE [ESC]",
-      {
-        fontSize: "12px",
-        color: "#ffffff",
-        fontFamily: "monospace",
-      }
-    );
-    closeText.setOrigin(0.5);
-    closeText.setScrollFactor(0);
-    closeText.setDepth(1003);
-
-    // Add instructions at the bottom
-    const instructionsText = this.add.text(
-      editorBg.x,
-      editorBg.y + editorBg.height / 2 - 40,
-      "In the full game, you will write code to solve challenges\nand earn rewards for your solutions.",
-      {
-        fontSize: "14px",
-        color: "#00ff00",
-        fontFamily: "monospace",
-        align: "center",
-      }
-    );
-    instructionsText.setOrigin(0.5);
-    instructionsText.setScrollFactor(0);
-    instructionsText.setDepth(1001);
-
-    // Store references to clean up later
-    this.tutorialTexts.push(editorBg as any);
-    this.tutorialTexts.push(titleText);
-    this.tutorialTexts.push(closeButton as any);
-    this.tutorialTexts.push(closeText);
-    this.tutorialTexts.push(instructionsText);
-
-    // Handle close button click
-    closeButton.on("pointerup", () => {
-      this.closeCodeEditor();
-    });
-
-    // Add keyboard shortcut to close
-    this.input.keyboard!.once("keydown-ESC", () => {
-      this.closeCodeEditor();
+      
+      // Play success sound
+      this.sound.play('success-sound');
     });
   }
 
-  private closeCodeEditor(): void {
-    // Clean up all tutorial elements
-    this.tutorialTexts.forEach((text) => text.destroy());
-    this.tutorialTexts = [];
-
-    // Mark the terminal step as completed
-    if (!this.tutorialSteps["terminal"]) {
-      this.tutorialSteps["terminal"] = true;
-
-      // Increment tutorial step
-      this.currentStep++;
-      this.updateProgress();
-
-      // If all steps are complete, show completion
-      if (this.currentStep >= this.totalSteps && !this.tutorialComplete) {
-        this.showTutorialStep("complete");
-      }
-    }
-  }
-
-  private startChallenge(challengeId: string, step: string): void {
-    // Show a simplified challenge interface
-    const challengeBg = this.add.rectangle(
+  /**
+   * Complete the tutorial and move on
+   */
+  private completeTutorial(): void {
+    // Mark tutorial as completed in localStorage
+    localStorage.setItem('completedTutorial', 'true');
+    
+    // Hide dialog
+    this.hideDialog();
+    
+    // Show completion message
+    const completedText = this.add.text(
       this.cameras.main.width / 2,
-      this.cameras.main.height / 2,
-      this.cameras.main.width - 100,
-      this.cameras.main.height - 100,
-      0x000000,
-      0.9
-    );
-    challengeBg.setStrokeStyle(2, 0xff00ff);
-    challengeBg.setScrollFactor(0);
-    challengeBg.setDepth(1000);
-
-    // Add title
-    const titleText = this.add.text(
-      challengeBg.x,
-      challengeBg.y - challengeBg.height / 2 + 40,
-      "CODING CHALLENGE",
+      this.cameras.main.height / 2 - 50,
+      'Tutorial Completed!',
       {
-        fontSize: "24px",
-        color: "#ff00ff",
-        fontFamily: "monospace",
-        fontStyle: "bold",
+        fontFamily: 'Press Start 2P',
+        fontSize: '24px',
+        color: '#FFFFFF',
+        stroke: '#000000',
+        strokeThickness: 6
       }
     );
-    titleText.setOrigin(0.5);
-    titleText.setScrollFactor(0);
-    titleText.setDepth(1001);
-
-    // Add description
-    const descText = this.add.text(
-      challengeBg.x,
-      challengeBg.y - 60,
-      "In this challenge, you would need to solve a\ncoding problem using JavaScript.\n\nFor example, you might be asked to implement\na function that sorts an array or finds patterns.",
-      {
-        fontSize: "16px",
-        color: "#ffffff",
-        fontFamily: "monospace",
-        align: "center",
-      }
-    );
-    descText.setOrigin(0.5);
-    descText.setScrollFactor(0);
-    descText.setDepth(1001);
-
-    // Add a flashing prompt
-    const promptText = this.add.text(
-      challengeBg.x,
-      challengeBg.y + 40,
-      "Complete challenges to earn XP and unlock new areas!",
-      {
-        fontSize: "18px",
-        color: "#00ff00",
-        fontFamily: "monospace",
-      }
-    );
-    promptText.setOrigin(0.5);
-    promptText.setScrollFactor(0);
-    promptText.setDepth(1001);
-
-    // Add close button
-    const closeButton = this.add.rectangle(
-      challengeBg.x,
-      challengeBg.y + challengeBg.height / 2 - 40,
-      200,
-      40,
-      0x333333,
-      1
-    );
-    closeButton.setInteractive({ useHandCursor: true });
-    closeButton.setScrollFactor(0);
-    closeButton.setDepth(1002);
-
-    const closeText = this.add.text(
-      closeButton.x,
-      closeButton.y,
-      "CLOSE [ESC]",
-      {
-        fontSize: "16px",
-        color: "#ffffff",
-        fontFamily: "monospace",
-      }
-    );
-    closeText.setOrigin(0.5);
-    closeText.setScrollFactor(0);
-    closeText.setDepth(1003);
-
-    // Flash the prompt
+    completedText.setOrigin(0.5);
+    completedText.setScrollFactor(0);
+    completedText.setDepth(200);
+    
+    // Animate it
+    completedText.setAlpha(0);
+    completedText.setScale(0.5);
     this.tweens.add({
-      targets: promptText,
-      alpha: { from: 1, to: 0.5 },
-      duration: 800,
-      yoyo: true,
-      repeat: -1,
+      targets: completedText,
+      alpha: 1,
+      scale: 1,
+      duration: 500,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        // Hold, then transition to World Map
+        this.time.delayedCall(3000, () => {
+          this.cameras.main.fadeOut(1000);
+          this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+            // Transition to world map
+            this.moveToWorldMap();
+          });
+        });
+      }
     });
+    
+    // Play success sound
+    this.sound.play('success-sound');
+  }
 
-    // Store references to clean up later
-    this.tutorialTexts = [
-      challengeBg as any,
-      titleText,
-      descText,
-      promptText,
-      closeButton as any,
-      closeText,
-    ];
-
-    // Handle close button click
-    closeButton.on("pointerup", () => {
-      this.closeChallengeModal();
+  /**
+   * Show skip tutorial prompt
+   */
+  private showSkipTutorialPrompt(): void {
+    // Create container for prompt
+    const container = this.add.container(
+      this.cameras.main.width / 2,
+      this.cameras.main.height / 2
+    );
+    container.setScrollFactor(0);
+    container.setDepth(1000);
+    
+    // Background
+    const background = this.add.graphics();
+    background.fillStyle(0x000000, 0.8);
+    background.fillRoundedRect(-200, -100, 400, 200, 10);
+    background.lineStyle(2, 0xFFFFFF, 0.8);
+    background.strokeRoundedRect(-200, -100, 400, 200, 10);
+    
+    // Message text
+    const messageText = this.add.text(
+      0,
+      -50,
+      'Skip Tutorial?',
+      {
+        fontFamily: 'Press Start 2P',
+        fontSize: '20px',
+        color: '#FFFFFF',
+        align: 'center'
+      }
+    );
+    messageText.setOrigin(0.5);
+    
+    // Submessage text
+    const submessageText = this.add.text(
+      0,
+      -10,
+      'Are you sure you want to skip the tutorial?',
+      {
+        fontFamily: 'VT323',
+        fontSize: '20px',
+        color: '#FFFFFF',
+        align: 'center'
+      }
+    );
+    submessageText.setOrigin(0.5);
+    
+    // Yes button
+    const yesButton = this.add.graphics();
+    yesButton.fillStyle(0x2ECC71, 1);
+    yesButton.fillRoundedRect(-100, 30, 90, 40, 5);
+    yesButton.lineStyle(2, 0xFFFFFF, 0.8);
+    yesButton.strokeRoundedRect(-100, 30, 90, 40, 5);
+    
+    const yesText = this.add.text(
+      -55,
+      50,
+      'YES',
+      {
+        fontFamily: 'Press Start 2P',
+        fontSize: '14px',
+        color: '#FFFFFF',
+        align: 'center'
+      }
+    );
+    yesText.setOrigin(0.5);
+    
+    // No button
+    const noButton = this.add.graphics();
+    noButton.fillStyle(0xFF6B6B, 1);
+    noButton.fillRoundedRect(10, 30, 90, 40, 5);
+    noButton.lineStyle(2, 0xFFFFFF, 0.8);
+    noButton.strokeRoundedRect(10, 30, 90, 40, 5);
+    
+    const noText = this.add.text(
+      55,
+      50,
+      'NO',
+      {
+        fontFamily: 'Press Start 2P',
+        fontSize: '14px',
+        color: '#FFFFFF',
+        align: 'center'
+      }
+    );
+    noText.setOrigin(0.5);
+    
+    // Add to container
+    container.add([background, messageText, submessageText, yesButton, yesText, noButton, noText]);
+    
+    // Make buttons interactive
+    yesButton.setInteractive({
+      useHandCursor: true
     });
-
-    // Add keyboard shortcut to close
-    this.input.keyboard!.once("keydown-ESC", () => {
-      this.closeChallengeModal();
+    yesButton.on('pointerdown', () => {
+      // Destroy prompt
+      container.destroy();
+      
+      // Skip tutorial
+      this.skipToWorldMap();
+    });
+    
+    noButton.setInteractive({
+      useHandCursor: true
+    });
+    noButton.on('pointerdown', () => {
+      // Just destroy prompt
+      container.destroy();
+    });
+    
+    // Animation
+    container.setAlpha(0);
+    this.tweens.add({
+      targets: container,
+      alpha: 1,
+      duration: 300
     });
   }
 
-  private closeChallengeModal(): void {
-    // Clean up all tutorial elements
-    this.tutorialTexts.forEach((text) => text.destroy());
-    this.tutorialTexts = [];
+  /**
+   * Skip directly to world map
+   */
+  private skipToWorldMap(): void {
+    // Mark tutorial as completed
+    localStorage.setItem('completedTutorial', 'true');
+    
+    // Fade out and transition
+    this.cameras.main.fadeOut(500);
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      this.moveToWorldMap();
+    });
+  }
 
-    // Mark the challenge step as completed
-    if (!this.tutorialSteps["challenge"]) {
-      this.tutorialSteps["challenge"] = true;
-
-      // Increment tutorial step
-      this.currentStep++;
-      this.updateProgress();
-
-      // If all steps are complete, show completion
-      if (this.currentStep >= this.totalSteps && !this.tutorialComplete) {
-        this.showTutorialStep("complete");
+  /**
+   * Move to world map scene
+   */
+  private moveToWorldMap(): void {
+    // Stop music
+    if (this.backgroundMusic.isPlaying) {
+      this.backgroundMusic.stop();
+    }
+    
+    // Transition to world map
+    this.scene.start(SceneType.WORLD_MAP, {
+      playerData: {
+        position: { x: 240, y: 240 } // Starting position in world map
       }
+    });
+  }
+
+  /**
+   * Update method called every frame
+   */
+  update(time: number, delta: number): void {
+    // Skip update if scene is transitioning or paused
+    if (this.scene.isTransitioning || this.scene.isPaused()) return;
+    
+    // Handle player movement
+    this.handlePlayerMovement();
+    
+    // Check step task completion
+    this.checkStepTaskCompletion();
+    
+    // Update indicators
+    this.updateIndicators();
+  }
+
+  /**
+   * Handle player movement based on input
+   */
+  private handlePlayerMovement(): void {
+    // Reset velocity
+    this.player.setVelocity(0);
+    
+    // Track if the player is moving
+    let isMoving = false;
+    
+    // Handle up/down movement
+    if (this.controls.up.isDown) {
+      this.player.setVelocityY(-this.playerVelocity);
+      this.currentPlayerDirection = 'up';
+      isMoving = true;
+    } else if (this.controls.down.isDown) {
+      this.player.setVelocityY(this.playerVelocity);
+      this.currentPlayerDirection = 'down';
+      isMoving = true;
+    }
+    
+    // Handle left/right movement
+    if (this.controls.left.isDown) {
+      this.player.setVelocityX(-this.playerVelocity);
+      this.currentPlayerDirection = 'left';
+      isMoving = true;
+    } else if (this.controls.right.isDown) {
+      this.player.setVelocityX(this.playerVelocity);
+      this.currentPlayerDirection = 'right';
+      isMoving = true;
+    }
+    
+    // Normalize diagonal movement
+    if (this.player.body.velocity.x !== 0 && this.player.body.velocity.y !== 0) {
+      this.player.body.velocity.normalize().scale(this.playerVelocity);
+    }
+    
+    // Update animation based on movement
+    if (isMoving) {
+      // Start walking animation in current direction
+      this.player.anims.play(`walk-${this.currentPlayerDirection}`, true);
+      
+      // Start walking sound if not already playing
+      if (!this.playerIsMoving && !this.walkSound.isPlaying) {
+        this.walkSound.play();
+      }
+      
+      this.playerIsMoving = true;
+    } else {
+      // Switch to idle animation in current direction
+      this.player.anims.play(`idle-${this.currentPlayerDirection}`, true);
+      
+      // Stop walking sound
+      if (this.playerIsMoving && this.walkSound.isPlaying) {
+        this.walkSound.stop();
+      }
+      
+      this.playerIsMoving = false;
     }
   }
 
-  private updateProgress(): void {
-    // Update progress bar
-    this.progressBar.width = (this.currentStep / this.totalSteps) * 200;
-    this.progressBar.x = this.cameras.main.width / 2 - 100;
-
-    // Update progress text
-    this.progressText.setText(
-      `Tutorial Progress: ${this.currentStep}/${this.totalSteps}`
-    );
+  /**
+   * Update indicators (tutor, challenge, etc.)
+   */
+  private updateIndicators(): void {
+    // Update tutor indicator
+    const tutorIndicator = this.tutor.getData('indicator');
+    if (tutorIndicator) {
+      tutorIndicator.setPosition(this.tutor.x, this.tutor.y - 30);
+    }
   }
 
-  private handleExit(): void {
-    // Transition back to the world map
-    this.cameras.main.fade(
-      500,
-      0,
-      0,
-      0,
-      false,
-      (camera: Phaser.Cameras.Scene2D.Camera, progress: number) => {
-        if (progress === 1) {
-          // Start the world map scene
-          this.scene.start("WorldMap", {
-            spawnPosition: { x: 150, y: 150 }, // Default spawn position in world map
-            coming_from: "TutorialArea",
-          });
-        }
-      }
-    );
-  }
-
-  private createAmbientEffects(): void {
-    // Add some ambient particles for cyberpunk feel
-    const particles = this.add.particles(0, 0, "pixel", {
-      x: { min: 0, max: this.cameras.main.width },
-      y: { min: 0, max: this.cameras.main.height },
-      scale: { start: 0.5, end: 0 },
-      speed: { min: 10, max: 50 },
-      angle: { min: 0, max: 360 },
-      blendMode: "ADD",
-      lifespan: 2000,
-      tint: [0x00f0ff, 0xff00ff, 0x7b61ff],
-      quantity: 1,
-      frequency: 1000,
-    });
-
-    particles.setDepth(5);
-    particles.setScrollFactor(0.1); // Parallax effect
+  /**
+   * Clean up resources when scene is shut down
+   */
+  shutdown(): void {
+    // Stop animations and sounds
+    if (this.walkSound.isPlaying) {
+      this.walkSound.stop();
+    }
+    
+    if (this.backgroundMusic.isPlaying) {
+      this.backgroundMusic.stop();
+    }
+    
+    // Remove event listeners
+    this.controls.interact.off('down');
+    this.controls.menu.off('down');
+    
+    // Clean up any remaining tweens
+    this.tweens.killAll();
+    
+    // Call parent shutdown
+    super.shutdown();
   }
 }
