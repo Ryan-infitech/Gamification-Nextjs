@@ -1,221 +1,329 @@
-"use client";
+'use client';
 
-import React, { useState } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { useState } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Alert } from '@/components/ui/Alert';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/RadioGroup';
+
+// Registration form schema using Zod
+const registerSchema = z
+  .object({
+    username: z
+      .string()
+      .min(3, 'Username minimal 3 karakter')
+      .max(30, 'Username maksimal 30 karakter')
+      .regex(/^[a-zA-Z0-9_]+$/, 'Username hanya boleh berisi huruf, angka, dan underscore'),
+    email: z.string().email('Email tidak valid'),
+    password: z
+      .string()
+      .min(8, 'Password minimal 8 karakter')
+      .regex(/[A-Z]/, 'Password harus mengandung setidaknya 1 huruf kapital')
+      .regex(/[0-9]/, 'Password harus mengandung setidaknya 1 angka'),
+    confirmPassword: z.string(),
+    role: z.enum(['student', 'teacher']),
+    agreeTerms: z.literal(true, {
+      errorMap: () => ({ message: 'Anda harus menyetujui syarat dan ketentuan' }),
+    }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Password tidak cocok',
+    path: ['confirmPassword'],
+  });
+
+// Typescript type for our form
+type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
-  const router = useRouter();
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+  const { register: authRegister } = useAuth();
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Setup react-hook-form with zod validation
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    watch,
+  } = useForm<RegisterFormValues>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      username: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      role: 'student',
+      agreeTerms: false,
+    },
+  });
 
-    if (!username || !email || !password) {
-      setError("Please fill out all fields");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
+  // Form submission handler
+  const onSubmit = async (data: RegisterFormValues) => {
+    setError(null);
+    setSuccess(null);
+    setIsLoading(true);
 
     try {
-      setError(null);
-      setIsLoading(true);
-
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            username,
-            display_name: username,
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      // Show success and redirect
-      router.push("/login?registered=true");
-    } catch (error: any) {
-      console.error("Registration error:", error);
-      setError(error.message || "Failed to register");
+      await authRegister(data.email, data.password, data.username, data.role);
+      setSuccess('Pendaftaran berhasil! Silakan cek email Anda untuk verifikasi.');
+      
+      // Redirect to verification page after a short delay
+      setTimeout(() => {
+        router.push('/verify-email');
+      }, 2000);
+    } catch (err) {
+      console.error('Registration error:', err);
+      setError('Gagal mendaftar. Email atau username mungkin sudah terdaftar.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--dark-bg)] p-4">
-      {/* Background elements */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-[var(--darker-bg)]">
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `
-                linear-gradient(to right, var(--neon-pink) 1px, transparent 1px),
-                linear-gradient(to bottom, var(--neon-pink) 1px, transparent 1px)
-              `,
-              backgroundSize: "40px 40px",
-              opacity: 0.1,
-              transform: "perspective(500px) rotateX(60deg)",
-              transformOrigin: "center bottom",
-            }}
-          />
+    <div className="min-h-screen bg-gradient-to-b from-background to-primary/5 flex flex-col items-center justify-center p-4 py-12">
+      {/* Animated pixels in background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute w-24 h-24 top-40 right-20 opacity-20 animate-float">
+          <Image src="/assets/decorations/pixel-star.svg" alt="Pixel decoration" width={96} height={96} />
+        </div>
+        <div className="absolute w-32 h-32 bottom-20 left-20 opacity-20 animate-float-delayed">
+          <Image src="/assets/decorations/pixel-cloud.svg" alt="Pixel decoration" width={128} height={128} />
         </div>
       </div>
 
-      {/* Register container */}
-      <div className="w-full max-w-md z-10 relative">
-        {/* Logo */}
-        <div className="flex justify-center mb-8">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="relative w-12 h-12 overflow-hidden">
-              <div className="glitch-wrapper">
-                <div className="glitch">
-                  <Image
-                    src="/pixel-logo.png"
-                    alt="CodeQuest Pixels Logo"
-                    width={48}
-                    height={48}
-                    className="object-contain"
-                  />
-                </div>
-              </div>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-md"
+      >
+        {/* Logo and Title */}
+        <div className="text-center mb-8">
+          <Link href="/">
+            <div className="inline-block">
+              <Image
+                src="/assets/logo/logo.png"
+                alt="Gamifikasi CS Logo"
+                width={80}
+                height={80}
+                className="mx-auto mb-4"
+              />
             </div>
-            <span className="font-bold text-2xl tracking-tight font-[family-name:var(--font-geist-mono)] neon-text">
-              CodeQuest<span className="text-[var(--neon-pink)]">Pixels</span>
-            </span>
           </Link>
+          <h1 className="font-pixel-heading text-3xl text-gradient mb-2">Daftar Akun</h1>
+          <p className="font-pixel-body text-muted-foreground">
+            Buat akun untuk memulai petualangan coding!
+          </p>
         </div>
 
-        {/* Register form */}
-        <div className="bg-[var(--dark-surface)] border border-[var(--neon-pink)] p-8 rounded-md pixel-corners">
-          <h1 className="text-2xl font-bold mb-6 text-center neon-text-pink">
-            CREATE ACCOUNT
-          </h1>
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            {error}
+          </Alert>
+        )}
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-900/30 border border-red-500 text-red-300 text-sm rounded">
-              {error}
-            </div>
-          )}
+        {/* Success Alert */}
+        {success && (
+          <Alert variant="success" className="mb-6">
+            {success}
+          </Alert>
+        )}
 
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div className="space-y-2">
-              <label className="block text-sm font-[family-name:var(--font-geist-mono)] text-gray-300">
-                USERNAME
+        {/* Registration Form */}
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="username" className="block font-pixel-body mb-2">
+                Username
               </label>
-              <input
+              <Input
+                id="username"
                 type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-3 py-2 bg-[var(--darker-bg)] border border-[var(--light-surface)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--neon-pink)] focus:border-transparent text-white"
-                placeholder="codehacker42"
-                required
+                placeholder="coolcoder123"
+                className="border-2 border-border h-12 font-pixel-body"
+                {...register('username')}
+                error={errors.username?.message}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-[family-name:var(--font-geist-mono)] text-gray-300">
-                EMAIL
+            <div>
+              <label htmlFor="email" className="block font-pixel-body mb-2">
+                Email
               </label>
-              <input
+              <Input
+                id="email"
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-[var(--darker-bg)] border border-[var(--light-surface)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--neon-pink)] focus:border-transparent text-white"
-                placeholder="your@email.com"
-                required
+                placeholder="nama@email.com"
+                className="border-2 border-border h-12 font-pixel-body"
+                {...register('email')}
+                error={errors.email?.message}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-[family-name:var(--font-geist-mono)] text-gray-300">
-                PASSWORD
+            <div>
+              <label htmlFor="password" className="block font-pixel-body mb-2">
+                Password
               </label>
-              <input
+              <Input
+                id="password"
                 type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-[var(--darker-bg)] border border-[var(--light-surface)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--neon-pink)] focus:border-transparent text-white"
                 placeholder="••••••••"
-                required
-                minLength={6}
+                className="border-2 border-border h-12 font-pixel-body"
+                {...register('password')}
+                error={errors.password?.message}
               />
-              <p className="text-xs text-gray-500">
-                Must be at least 6 characters
+              <p className="text-xs font-pixel-body text-muted-foreground mt-1">
+                Minimal 8 karakter, 1 huruf kapital, dan 1 angka
               </p>
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-[family-name:var(--font-geist-mono)] text-gray-300">
-                CONFIRM PASSWORD
+            <div>
+              <label htmlFor="confirmPassword" className="block font-pixel-body mb-2">
+                Konfirmasi Password
               </label>
-              <input
+              <Input
+                id="confirmPassword"
                 type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-[var(--darker-bg)] border border-[var(--light-surface)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--neon-pink)] focus:border-transparent text-white"
                 placeholder="••••••••"
-                required
+                className="border-2 border-border h-12 font-pixel-body"
+                {...register('confirmPassword')}
+                error={errors.confirmPassword?.message}
               />
             </div>
 
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="cyber-button w-full py-2 text-center relative overflow-hidden group bg-[var(--neon-pink)] border-[var(--neon-pink)] text-white hover:bg-[var(--neon-pink)]/80"
-              >
-                {isLoading ? (
-                  <div className="loading-pixels">
-                    <div></div>
-                    <div></div>
-                    <div></div>
-                  </div>
-                ) : (
-                  "CREATE DIGITAL IDENTITY"
-                )}
-              </button>
+            <div>
+              <label className="block font-pixel-body mb-2">Daftar Sebagai</label>
+              <RadioGroup defaultValue="student" className="flex gap-4">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem
+                    id="student"
+                    value="student"
+                    {...register('role')}
+                  />
+                  <label htmlFor="student" className="font-pixel-body">
+                    Pelajar
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem
+                    id="teacher"
+                    value="teacher"
+                    {...register('role')}
+                  />
+                  <label htmlFor="teacher" className="font-pixel-body">
+                    Pengajar
+                  </label>
+                </div>
+              </RadioGroup>
             </div>
-          </form>
 
-          <div className="mt-6 text-center text-sm">
-            <span className="text-gray-400">Already have an account?</span>{" "}
+            <div className="flex items-start">
+              <div className="flex items-center h-5">
+                <Checkbox id="agreeTerms" {...register('agreeTerms')} />
+              </div>
+              <div className="ml-3">
+                <label
+                  htmlFor="agreeTerms"
+                  className="font-pixel-body text-sm text-foreground"
+                >
+                  Saya setuju dengan{' '}
+                  <Link
+                    href="/terms"
+                    className="text-primary hover:text-primary/80 transition-colors"
+                  >
+                    Syarat dan Ketentuan
+                  </Link>{' '}
+                  serta{' '}
+                  <Link
+                    href="/privacy"
+                    className="text-primary hover:text-primary/80 transition-colors"
+                  >
+                    Kebijakan Privasi
+                  </Link>
+                </label>
+                {errors.agreeTerms && (
+                  <p className="mt-1 text-xs text-danger">{errors.agreeTerms.message}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <Button
+            type="submit"
+            className="w-full h-12 font-pixel-body text-lg"
+            isLoading={isLoading}
+          >
+            Daftar
+          </Button>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-background font-pixel-body text-muted-foreground">
+                Atau daftar dengan
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 font-pixel-body"
+              onClick={() => {
+                /* Implement Google registration */
+              }}
+            >
+              <Image src="/assets/icons/google.svg" width={20} height={20} alt="Google" className="mr-2" />
+              Google
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 font-pixel-body"
+              onClick={() => {
+                /* Implement GitHub registration */
+              }}
+            >
+              <Image src="/assets/icons/github.svg" width={20} height={20} alt="GitHub" className="mr-2" />
+              GitHub
+            </Button>
+          </div>
+        </form>
+
+        {/* Login Link */}
+        <div className="text-center mt-8">
+          <p className="font-pixel-body text-muted-foreground">
+            Sudah punya akun?{' '}
             <Link
               href="/login"
-              className="text-[var(--neon-blue)] hover:text-[var(--neon-purple)]"
+              className="text-primary hover:text-primary/80 font-semibold transition-colors"
             >
-              Login
+              Login sekarang
             </Link>
-          </div>
+          </p>
         </div>
+      </motion.div>
 
-        {/* Decorative elements */}
-        <div className="mt-8 flex justify-center items-center">
-          <div className="w-32 h-px bg-gradient-to-r from-transparent via-[var(--neon-pink)] to-transparent"></div>
-          <div className="mx-4 text-xs text-gray-500 font-[family-name:var(--font-geist-mono)]">
-            JOIN THE NETWORK
-          </div>
-          <div className="w-32 h-px bg-gradient-to-r from-transparent via-[var(--neon-pink)] to-transparent"></div>
-        </div>
+      {/* Footer */}
+      <div className="mt-16 text-center">
+        <p className="text-sm font-pixel-body text-muted-foreground">
+          &copy; {new Date().getFullYear()} Gamifikasi CS. All rights reserved.
+        </p>
       </div>
     </div>
   );
